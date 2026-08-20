@@ -150,10 +150,17 @@ export async function extractOneSource(
     maxTokens: 16000,
   });
 
-  // Everything already in the project, so the duplicate gate compares against
-  // the whole model rather than only this source's own output.
+  // Everything already in the project, minus this source's still-pending
+  // insights — those are this run replacing its own previous output, and
+  // comparing against them would flag every re-extraction as a duplicate of
+  // itself. Insights the analyst accepted or promoted from this source stay in
+  // the comparison: a re-run restating a point that is already in the model is
+  // exactly the duplication worth knowing about.
   const existing = await prisma.extractedInsight.findMany({
-    where: { projectId, sourceDocumentId: { not: source.id } },
+    where: {
+      projectId,
+      NOT: { sourceDocumentId: source.id, status: "pending" },
+    },
     select: { normalizedText: true },
   });
 
