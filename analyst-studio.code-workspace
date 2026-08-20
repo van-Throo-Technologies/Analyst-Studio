@@ -1,0 +1,15 @@
+{
+  "folders": [
+    {
+      "path": "Analyst Studio",
+      "name": "Analyst Studio"
+    }
+  ],
+  "settings": {
+    "files.exclude": {
+      "**/.DS_Store": true,
+      "**/.git": true,
+      "**/node_modules": true
+    }
+  }
+}

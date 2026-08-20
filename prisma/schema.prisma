@@ -1,0 +1,574 @@
+// Analyst Studio — canonical domain model.
+//
+// Notes on SQLite:
+//  - SQLite has no native enum type. Enum-like columns are stored as String and
+//    validated with Zod at the application boundary (see /lib/schemas).
+//  - SQLite has no array type. List columns are stored as JSON-encoded strings
+//    (always a JSON array) and parsed by the mappers in /lib/db/mappers.ts.
+//    Those columns are suffixed `Json` so the storage shape is never a surprise.
+//
+// Access: per-project roles via ProjectAccess. There is no authentication yet
+// — lib/auth/current-user.ts resolves the acting user, and is the single place
+// to swap for real auth.
+// TODO(roadmap): orgId for multi-tenancy once organisations exist.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ---------------------------------------------------------------------------
+// Project
+// ---------------------------------------------------------------------------
+
+model Project {
+  id           String @id @default(cuid())
+  name         String
+  description  String @default("")
+  analysisGoal String @default("")
+
+  // --- Structured domain context -------------------------------------------
+  // Industry shapes what an analyst should be asking about long before any AI
+  // runs. Held as first-class columns (not free text) so later phases can
+  // branch on them without parsing prose.
+
+  /// Industry: see industrySchema in lib/schemas/enums.ts
+  industry              String  @default("other")
+  /// Narrower slice within the industry, e.g. "retail banking".
+  subdomain             String?
+  /// Jurisdiction: see jurisdictionSchema. Drives which regimes apply.
+  jurisdiction          String?
+  /// RegulatorySensitivity: "low" | "medium" | "high"
+  regulatorySensitivity String  @default("low")
+  /// The kind of solution under analysis, e.g. "web platform", "CRM".
+  solutionDomain        String?
+  /// Free-form notes that do not fit the structured fields above.
+  domainContext         String  @default("")
+
+  /// ScenarioType: "greenfield" | "brownfield".
+  /// Greenfield is fed by the team as work happens; brownfield is reconstructed
+  /// after the fact from whatever survives. It changes what good intake looks
+  /// like, so it is captured at creation.
+  scenarioType String @default("greenfield")
+
+  /// The user who created it. Always also holds an OWNER ProjectAccess row —
+  /// this column exists so ownership survives an accidental access change.
+  ownerId String?
+
+  /// AnalysisMode: "BA" | "FA"
+  defaultMode String   @default("BA")
+  /// ProjectStatus: "draft" | "in_analysis" | "review" | "delivered"
+  status      String   @default("draft")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  owner              User?           @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  access             ProjectAccess[]
+  domainProfile      DomainProfile?
+  auditLogs          ProjectAuditLog[]
+  sourceDocuments    SourceDocument[]
+  extractedInsights  ExtractedInsight[]
+  stakeholders       Stakeholder[]
+  actors             Actor[]
+  businessGoals      BusinessGoal[]
+  businessRules      BusinessRule[]
+  requirements       Requirement[]
+  useCases           UseCase[]
+  acceptanceCriteria AcceptanceCriterion[]
+  dependencies       Dependency[]
+  traceLinks         TraceLink[]
+  packOutputs        PackOutput[]
+  aiGenerations      AiGeneration[]
+  aiFindings         AiFinding[]
+}
+
+/// Derived, denormalised view of a project's domain context.
+///
+/// Regenerated from the Project's structured fields whenever they change, so it
+/// is always a projection and never a second source of truth. The four list
+/// columns are the seam for later phases: they stay empty in the MVP and will
+/// be populated with domain knowledge that shapes extraction and quality
+/// checks. `promptContextSummary` is the one-line form intended to be prefixed
+/// to AI prompts.
+model DomainProfile {
+  id                    String  @id @default(cuid())
+  projectId             String  @unique
+  industry              String
+  subdomain             String?
+  jurisdiction          String?
+  regulatorySensitivity String
+  solutionDomain        String?
+
+  /// JSON string[] — domain vocabulary worth preserving verbatim.
+  terminologyHintsJson        String @default("[]")
+  /// JSON string[] — risk areas this domain tends to carry.
+  likelyRiskAreasJson         String @default("[]")
+  /// JSON string[] — requirement themes that usually appear here.
+  likelyRequirementThemesJson String @default("[]")
+  /// JSON string[] — compliance regimes and obligations likely to apply.
+  likelyComplianceConcernsJson String @default("[]")
+
+  /// One-line summary, e.g. "Insurance · Claims processing · EU · Medium regulatory sensitivity".
+  promptContextSummary String @default("")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+/// A person. There is no authentication yet — see lib/auth/current-user.ts for
+/// how the acting user is resolved in the meantime.
+/// TODO(roadmap): password/SSO columns and a sessions table when auth lands.
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  createdAt DateTime @default(now())
+
+  ownedProjects   Project[]         @relation("ProjectOwner")
+  access          ProjectAccess[]
+  uploadedSources SourceDocument[]
+  validatedSources SourceDocument[] @relation("SourceValidatedBy")
+  auditEntries    ProjectAuditLog[]
+}
+
+/// Grants one user one role on one project.
+///
+/// Role is per project, not global: the same person is often the BA on one
+/// engagement and a reviewer on another. Absence of a row means no access —
+/// there is no implicit public read.
+model ProjectAccess {
+  id        String @id @default(cuid())
+  projectId String
+  userId    String
+  /// ProjectRole: "OWNER" | "PM" | "BA" | "FA" | "ARCHITECT" | "REVIEWER"
+  role      String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@index([userId])
+}
+
+/// Append-only record of what happened on a project.
+///
+/// Covers the project row and the entities under it — `entityType`/`entityId`
+/// say which. Two attribution columns rather than one: `userId` for a real
+/// person, `changedBy` for actions with no user behind them (a migration, a
+/// backfill, a future scheduled job). Collapsing them would either lose the
+/// system entries or invent fake users for them.
+model ProjectAuditLog {
+  id        String @id @default(cuid())
+  projectId String
+  userId    String?
+  /// AuditAction: "created" | "settings_changed" | "status_changed" |
+  ///              "archived" | "source_added" | "source_updated" | "source_deleted" |
+  ///              "access_granted" | "access_revoked"
+  action    String
+  /// EntityType-ish: "project" | "source_document" | "project_access".
+  entityType String @default("project")
+  /// The affected entity, when it is not the project itself.
+  entityId   String?
+  /// JSON ProjectChange[] — { label, from, to }. Structured so a later
+  /// compliance view can query it; the summary below is for humans.
+  changesJson String @default("[]")
+  /// One-line human-readable summary.
+  changesSummary String @default("")
+  /// Actor label for entries with no user, e.g. "migration". Ignored when
+  /// `userId` is set.
+  changedBy String @default("system")
+
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, createdAt])
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Intake
+// ---------------------------------------------------------------------------
+
+model SourceDocument {
+  id        String   @id @default(cuid())
+  projectId String
+  title     String
+  /// SourceType: "workshop_notes" | "transcript" | "email" | "feature_brief" |
+  ///             "existing_requirements" | "other"
+  sourceType String  @default("other")
+  content   String
+
+  /// Who added it. Nullable so a source outlives the deletion of its uploader.
+  uploadedByUserId String?
+  /// The uploader's role *at the time of upload*, denormalised on purpose:
+  /// roles change, and "who was the BA when this landed" must not change with
+  /// them.
+  uploaderRole     String?
+
+  // --- Provenance -----------------------------------------------------------
+  // Where the material came from, as distinct from what kind of document it is
+  // (`sourceType`). Notes taken in the room and a Confluence page describing
+  // the same workshop months later are the same type and not the same evidence.
+
+  /// SourceProvenance: see sourceProvenanceSchema in lib/schemas/enums.ts
+  sourceProvenance String    @default("manual_transcription")
+  /// When the material was created or last modified *in its origin system* —
+  /// the date of the workshop, not the date it was pasted in here. Null when
+  /// nobody knows, which is itself worth recording rather than guessing.
+  sourceTimestamp  DateTime?
+  /// SHA-256 of `content`. Exists to answer "is this the same material as
+  /// before" — an identical re-upload versus a re-upload with changes. Null
+  /// only for rows written before checksums existed; run db:backfill:checksums.
+  checksumHash     String?
+
+  // --- Validation -----------------------------------------------------------
+  // Whether a human has confirmed this is a faithful record of its origin.
+  // About the material, not the analysis: it says "this is what was said", not
+  // "we agree with it".
+
+  /// ValidationStatus: "pending" | "validated" | "rejected"
+  validationStatus   String    @default("pending")
+  /// Who decided. Nullable so the record outlives the deletion of that user.
+  validatedByUserId  String?
+  validatedAt        DateTime?
+  /// Why it was rejected, or what was checked when validating.
+  validationNotes    String    @default("")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project     Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  uploadedBy  User?              @relation(fields: [uploadedByUserId], references: [id], onDelete: SetNull)
+  validatedBy User?              @relation("SourceValidatedBy", fields: [validatedByUserId], references: [id], onDelete: SetNull)
+  insights    ExtractedInsight[]
+
+  @@index([projectId])
+  @@index([validationStatus])
+  @@index([validatedByUserId])
+  // Duplicate detection looks up by project *and* content, so the composite is
+  // the one that serves it.
+  @@index([projectId, checksumHash])
+}
+
+model ExtractedInsight {
+  id               String  @id @default(cuid())
+  projectId        String
+  sourceDocumentId String
+  /// InsightType: "stakeholder" | "actor" | "goal" | "business_rule" |
+  ///              "assumption" | "constraint" | "risk" | "requirement_candidate"
+  insightType      String
+  rawText          String
+  normalizedText   String
+  /// 0..1
+  confidence       Float   @default(0.5)
+  /// InsightStatus: "pending" | "accepted" | "dismissed" | "promoted"
+  status           String  @default("pending")
+  /// Set when the insight has been converted into a structured entity.
+  promotedToType   String?
+  promotedToId     String?
+  /// True once a human has edited normalizedText after generation.
+  userEdited       Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project        Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sourceDocument SourceDocument @relation(fields: [sourceDocumentId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, insightType])
+  @@index([sourceDocumentId])
+}
+
+// ---------------------------------------------------------------------------
+// Structured entities
+// ---------------------------------------------------------------------------
+
+model Stakeholder {
+  id            String   @id @default(cuid())
+  projectId     String
+  name          String
+  role          String   @default("")
+  notes         String   @default("")
+  /// JSON string[] of SourceDocument ids
+  sourceRefsJson String  @default("[]")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model Actor {
+  id            String   @id @default(cuid())
+  projectId     String
+  name          String
+  description   String   @default("")
+  /// JSON string[] of SourceDocument ids
+  sourceRefsJson String  @default("[]")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model BusinessGoal {
+  id            String   @id @default(cuid())
+  projectId     String
+  title         String
+  description   String   @default("")
+  /// JSON string[] of SourceDocument ids
+  sourceRefsJson String  @default("[]")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model BusinessRule {
+  id            String   @id @default(cuid())
+  projectId     String
+  ruleText      String
+  rationale     String   @default("")
+  /// JSON string[] of SourceDocument ids
+  sourceRefsJson String  @default("[]")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model Requirement {
+  id          String @id @default(cuid())
+  projectId   String
+  /// Human-facing short code, unique per project, e.g. "REQ-001".
+  ref         String
+  title       String
+  description String @default("")
+  /// RequirementType: "business" | "functional" | "non_functional"
+  requirementType String @default("functional")
+  /// Priority: "low" | "medium" | "high" | "critical"
+  priority        String @default("medium")
+  /// RequirementStatus: "draft" | "reviewed" | "approved"
+  status          String @default("draft")
+  owner           String @default("")
+  rationale       String @default("")
+  /// JSON string[]
+  assumptionsJson String @default("[]")
+  /// JSON string[]
+  constraintsJson String @default("[]")
+  /// JSON string[] of SourceDocument ids
+  sourceRefsJson  String @default("[]")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project            Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  useCases           UseCase[]
+  acceptanceCriteria AcceptanceCriterion[]
+  dependenciesFrom   Dependency[]          @relation("DependencyFrom")
+  dependenciesTo     Dependency[]          @relation("DependencyTo")
+
+  @@unique([projectId, ref])
+  @@index([projectId])
+}
+
+model UseCase {
+  id            String  @id @default(cuid())
+  projectId     String
+  requirementId String?
+  ref           String
+  title         String
+  /// ScopeLevel: "high_level" | "detailed"
+  scopeLevel    String  @default("high_level")
+  primaryActor  String  @default("")
+  /// JSON string[]
+  supportingActorsJson String @default("[]")
+  trigger              String @default("")
+  /// JSON string[]
+  preconditionsJson    String @default("[]")
+  /// JSON string[]
+  postconditionsJson   String @default("[]")
+  /// JSON string[] — ordered steps
+  mainFlowJson         String @default("[]")
+  /// JSON FlowBranch[] — { name, steps[] }
+  alternateFlowsJson   String @default("[]")
+  /// JSON FlowBranch[] — { name, steps[] }
+  exceptionFlowsJson   String @default("[]")
+  /// JSON string[] of SourceDocument ids
+  sourceRefsJson       String @default("[]")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  requirement Requirement? @relation(fields: [requirementId], references: [id], onDelete: SetNull)
+
+  @@unique([projectId, ref])
+  @@index([projectId])
+  @@index([requirementId])
+}
+
+model AcceptanceCriterion {
+  id            String  @id @default(cuid())
+  projectId     String
+  requirementId String?
+  ref           String
+  /// CriterionType: "business" | "functional" | "non_functional"
+  criterionType String  @default("functional")
+  text          String
+  /// 0..1 — heuristic testability score from the deterministic quality engine.
+  testabilityScore Float @default(0)
+  /// JSON string[] of SourceDocument ids
+  sourceRefsJson   String @default("[]")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  requirement Requirement? @relation(fields: [requirementId], references: [id], onDelete: SetNull)
+
+  @@unique([projectId, ref])
+  @@index([projectId])
+  @@index([requirementId])
+}
+
+model Dependency {
+  id                String @id @default(cuid())
+  projectId         String
+  fromRequirementId String
+  toRequirementId   String
+  /// DependencyType: "blocks" | "relates_to" | "depends_on" | "conflicts_with"
+  dependencyType    String @default("relates_to")
+  notes             String @default("")
+
+  createdAt DateTime @default(now())
+
+  project         Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  fromRequirement Requirement @relation("DependencyFrom", fields: [fromRequirementId], references: [id], onDelete: Cascade)
+  toRequirement   Requirement @relation("DependencyTo", fields: [toRequirementId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model TraceLink {
+  id             String @id @default(cuid())
+  projectId      String
+  /// EntityType: "source_document" | "extracted_insight" | "stakeholder" | "actor" |
+  ///             "business_goal" | "business_rule" | "requirement" | "use_case" |
+  ///             "acceptance_criterion" | "pack_section"
+  fromEntityType String
+  fromEntityId   String
+  toEntityType   String
+  toEntityId     String
+  linkReason     String @default("")
+
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, fromEntityType, fromEntityId, toEntityType, toEntityId])
+  @@index([projectId])
+}
+
+// ---------------------------------------------------------------------------
+// Outputs
+// ---------------------------------------------------------------------------
+
+model PackOutput {
+  id        String   @id @default(cuid())
+  projectId String
+  /// AnalysisMode: "BA" | "FA"
+  mode      String
+  title     String
+  /// JSON — the canonical pack object. Markdown/HTML are rendered from this.
+  jsonContent     String
+  markdownContent String
+  htmlContent     String
+  createdAt       DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// AI audit trail — never discard raw model output.
+// ---------------------------------------------------------------------------
+
+model AiGeneration {
+  id        String @id @default(cuid())
+  projectId String
+  /// AiJob: "source_extraction" | "requirement_drafting" | "use_case_drafting" |
+  ///        "acceptance_criteria_drafting" | "quality_review" | "pack_generation"
+  job           String
+  model         String
+  promptId      String
+  promptVersion String
+  /// JSON string[] — ids of entities fed into the prompt.
+  inputEntityIdsJson String @default("[]")
+  /// Verbatim model text. Never overwritten.
+  rawOutput          String
+  /// Parsed + validated output, or null when parsing failed.
+  normalizedOutput   String?
+  /// "ok" | "parse_error" | "api_error"
+  outcome            String  @default("ok")
+  errorMessage       String?
+  inputTokens        Int     @default(0)
+  outputTokens       Int     @default(0)
+  durationMs         Int     @default(0)
+  /// Flipped to true when a human edits any entity produced by this generation.
+  userEditedAfter    Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, createdAt])
+}
+
+/// Findings produced by the AI quality reviewer. Deterministic findings are
+/// recomputed live on every request and are intentionally not persisted.
+model AiFinding {
+  id        String @id @default(cuid())
+  projectId String
+  runId     String
+  /// AiJob that produced this finding. Extraction gates and the quality review
+  /// both write here, and each replaces only its own rows on a re-run — without
+  /// this, one job's refresh silently deletes the other's findings.
+  job       String @default("quality_review")
+  /// Severity: "info" | "warning" | "critical"
+  severity    String
+  entityType  String
+  entityId    String
+  title       String
+  explanation String
+  suggestedFix String @default("")
+  /// "open" | "dismissed"
+  status      String @default("open")
+
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, createdAt])
+}

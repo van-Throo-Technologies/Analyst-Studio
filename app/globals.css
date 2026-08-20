@@ -1,0 +1,94 @@
+@import "tailwindcss";
+
+/*
+ * Analyst Studio design tokens.
+ *
+ * The product is a review surface for analysis work, so the palette is
+ * deliberately quiet: a warm paper canvas, white cards, hairline borders, and
+ * a single ink-blue accent used only for primary actions and active state.
+ * Colour carries meaning here (severity, mode, requirement type) — it is never
+ * decoration, which is why there are no gradients and no brand flourishes.
+ *
+ * Light only for the MVP. A half-finished dark theme would undermine the
+ * calm-and-trustworthy goal more than its absence does.
+ * TODO(roadmap): dark theme once the surface set settles.
+ */
+
+@theme {
+  --color-canvas: #f6f6f4;
+  --color-surface: #ffffff;
+  --color-surface-muted: #fafaf9;
+  --color-line: #e3e3df;
+  --color-line-strong: #cfcfc9;
+
+  --color-ink: #1a1a18;
+  --color-ink-soft: #4a4a45;
+  --color-ink-muted: #77776f;
+  --color-ink-faint: #9a9a92;
+
+  --color-accent: #2b4c74;
+  --color-accent-hover: #1f3a5a;
+  --color-accent-soft: #eef2f7;
+  --color-accent-line: #c3d2e3;
+
+  /* Semantic status colours — used by severity badges and quality findings. */
+  --color-critical: #9b2c2c;
+  --color-critical-soft: #fdf0ef;
+  --color-critical-line: #f0cdca;
+  --color-warning: #8a5a10;
+  --color-warning-soft: #fdf6ea;
+  --color-warning-line: #ecdcbc;
+  --color-info: #2b4c74;
+  --color-info-soft: #eef2f7;
+  --color-info-line: #c3d2e3;
+  --color-positive: #2c6248;
+  --color-positive-soft: #eef5f1;
+  --color-positive-line: #c3ddce;
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+}
+
+html {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Focus ring: one consistent, high-contrast treatment everywhere. */
+*:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/*
+ * Print rules. The exported HTML pack and the pack preview both use these so
+ * "Print to PDF" produces a clean document with no app chrome.
+ */
+@media print {
+  .print-hidden {
+    display: none !important;
+  }
+
+  .print-page {
+    background: #fff;
+    color: #000;
+  }
+
+  h1,
+  h2,
+  h3 {
+    break-after: avoid;
+  }
+
+  li,
+  tr,
+  blockquote {
+    break-inside: avoid;
+  }
+}
