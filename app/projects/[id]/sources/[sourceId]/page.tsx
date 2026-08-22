@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db/client";
 import { toExtractedInsight } from "@/lib/db/mappers";
 import { formatDate, formatDateTime, pluralize } from "@/lib/utils";
 import { currentUserCan } from "@/lib/auth/access";
+import { displayName } from "@/lib/auth/display-name";
 import { shortChecksum } from "@/lib/intake/checksum";
 import {
   ButtonLink,
@@ -89,7 +90,7 @@ export default async function SourceDetailPage({
               <DetailRow label="Added by">
                 {source.uploadedBy ? (
                   <>
-                    {source.uploadedBy.name}
+                    {displayName(source.uploadedBy)}
                     {source.uploaderRole ? (
                       <span className="text-ink-faint">
                         {" "}

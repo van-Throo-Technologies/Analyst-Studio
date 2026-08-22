@@ -4,6 +4,7 @@ import { getProject, listInsights, listSourceDocuments } from "@/lib/db/queries"
 import { prisma } from "@/lib/db/client";
 import { isAiConfigured } from "@/lib/ai/client";
 import { canExtractProject } from "@/lib/extraction/gate";
+import { displayName } from "@/lib/auth/display-name";
 import { severitySchema } from "@/lib/schemas/enums";
 import { ButtonLink, EmptyState, PageHeader } from "@/components/ui";
 import { ExtractionRunner } from "@/components/extraction/extraction-runner";
@@ -45,7 +46,7 @@ export default async function ExtractionPage({
   const sourcesForReview = sources.map((s) => ({
     id: s.id,
     title: s.title,
-    uploadedByName: s.uploadedBy?.name ?? null,
+    uploadedByName: s.uploadedBy ? displayName(s.uploadedBy) : null,
     uploaderRole: s.uploaderRole,
     validatedAt: s.validatedAt,
   }));

@@ -1,5 +1,6 @@
 import { switchDevUserAction } from "@/app/dev-user-actions";
 import { getCurrentUser, listSelectableUsers } from "@/lib/auth/current-user";
+import { displayName } from "@/lib/auth/display-name";
 
 /**
  * ============================================================================
@@ -44,7 +45,7 @@ export async function DevUserSwitcher() {
       >
         {users.map((option) => (
           <option key={option.id} value={option.id}>
-            {option.name}
+            {displayName(option)}
           </option>
         ))}
       </select>

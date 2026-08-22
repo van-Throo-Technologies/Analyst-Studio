@@ -7,9 +7,10 @@
 //    (always a JSON array) and parsed by the mappers in /lib/db/mappers.ts.
 //    Those columns are suffixed `Json` so the storage shape is never a surprise.
 //
-// Access: per-project roles via ProjectAccess. There is no authentication yet
-// — lib/auth/current-user.ts resolves the acting user, and is the single place
-// to swap for real auth.
+// Access: per-project roles via ProjectAccess. Sign-in is Auth.js (NextAuth v5)
+// with the Prisma adapter — Account, Session and VerificationToken below are
+// adapter-owned. lib/auth/current-user.ts still resolves the acting user and is
+// the single place that does; the tables exist ahead of it being wired up.
 // TODO(roadmap): orgId for multi-tenancy once organisations exist.
 
 generator client {
@@ -123,20 +124,93 @@ model DomainProfile {
   @@index([projectId])
 }
 
-/// A person. There is no authentication yet — see lib/auth/current-user.ts for
-/// how the acting user is resolved in the meantime.
-/// TODO(roadmap): password/SSO columns and a sessions table when auth lands.
+/// A person. Identity is resolved in exactly one place — lib/auth/current-user.ts.
+///
+/// The shape of this row is partly dictated by the Auth.js Prisma adapter,
+/// which reads and writes `name`, `email`, `emailVerified` and `image` by those
+/// exact names. Columns below are marked where the adapter owns them.
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
-  name      String
+
+  /// Nullable because the adapter requires it to be. A magic-link sign-in
+  /// carries no name at all, and an OAuth profile may withhold one, so a
+  /// NOT NULL column here would reject the very first sign-in of an email
+  /// user. Never render this raw — `displayName()` in lib/auth/display-name.ts
+  /// falls back to the email local part so the UI never prints "null".
+  name      String?
+  /// Adapter-owned. When the user first proved control of `email` via a magic
+  /// link. Null means they have only ever used OAuth, or have not signed in.
+  emailVerified DateTime?
+  /// Adapter-owned. Avatar URL from the OAuth profile.
+  image     String?
+
   createdAt DateTime @default(now())
 
+  accounts        Account[]
+  sessions        Session[]
   ownedProjects   Project[]         @relation("ProjectOwner")
   access          ProjectAccess[]
   uploadedSources SourceDocument[]
   validatedSources SourceDocument[] @relation("SourceValidatedBy")
   auditEntries    ProjectAuditLog[]
+}
+
+/// One external identity — a Google login, or an email magic link — bound to a
+/// User. One person can hold several.
+///
+/// Written entirely by the Auth.js Prisma adapter. The snake_case columns are
+/// deliberate and must not be renamed to match house style: the adapter passes
+/// an OAuth token response through to Prisma under exactly these keys, so the
+/// *Prisma field* names have to match. `@map` cannot paper over it — that
+/// renames the database column, not the field the adapter addresses.
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  /// "oauth" | "oidc" | "email" | "webauthn"
+  type              String
+  /// e.g. "google"
+  provider          String
+  /// The provider's own id for this account. For an email account, the address.
+  providerAccountId String
+
+  refresh_token String?
+  access_token  String?
+  /// Absolute expiry of `access_token`, in seconds since the epoch.
+  expires_at    Int?
+  token_type    String?
+  scope         String?
+  id_token      String?
+  session_state String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+/// A live sign-in. Database-backed rather than a JWT, because the Prisma
+/// adapter is in play and a database session can be revoked server-side —
+/// deleting the row ends the session, which a signed token cannot offer.
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// A pending magic link. Consumed on first use by the adapter; rows are deleted
+/// as they are redeemed, so this table stays near-empty in normal operation.
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
 }
 
 /// Grants one user one role on one project.

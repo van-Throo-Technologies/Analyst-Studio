@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db/client";
 import { toProject } from "@/lib/db/mappers";
 import { requireCurrentUser } from "@/lib/auth/current-user";
+import { displayName } from "@/lib/auth/display-name";
 import { AccessDeniedError, requireCapability } from "@/lib/auth/access";
 import { generateDomainProfile } from "@/lib/domain/profile";
 import {
@@ -85,7 +86,7 @@ export async function createProjectAction(
     action: "access_granted",
     entityType: "project_access",
     entityId: user.id,
-    changesSummary: `${user.name} added as OWNER`,
+    changesSummary: `${displayName(user)} added as OWNER`,
   });
 
   revalidatePath("/projects");

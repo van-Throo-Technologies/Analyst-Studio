@@ -1,5 +1,6 @@
 import type { ProjectAuditEntry } from "@/lib/schemas/entities";
 import { AUDIT_ACTION_LABELS } from "@/lib/schemas/enums";
+import { displayName } from "@/lib/auth/display-name";
 import { formatDateTime } from "@/lib/utils";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui";
 
@@ -40,7 +41,7 @@ export function AuditTrailCard({ entries }: { entries: ProjectAuditEntry[] }) {
                 <span className="text-[11px] text-ink-faint">
                   {formatDateTime(entry.createdAt)} ·{" "}
                   {entry.user ? (
-                    <span className="text-ink-muted">{entry.user.name}</span>
+                    <span className="text-ink-muted">{displayName(entry.user)}</span>
                   ) : (
                     <span title="No user behind this action">{entry.changedBy}</span>
                   )}

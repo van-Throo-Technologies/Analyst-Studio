@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { listProjectsForUser } from "@/lib/db/queries";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { displayName } from "@/lib/auth/display-name";
 import { formatRelative, pluralize } from "@/lib/utils";
 import { ButtonLink, Card, EmptyState, PageHeader } from "@/components/ui";
 import {
@@ -38,7 +39,7 @@ export default async function ProjectsPage() {
     <main className="mx-auto w-full max-w-[1400px] flex-1 px-6 py-8">
       <PageHeader
         title="Projects"
-        description={`Projects ${user.name} has access to. Each holds its own discovery sources, requirement model and generated packs.`}
+        description={`Projects ${displayName(user)} has access to. Each holds its own discovery sources, requirement model and generated packs.`}
         actions={
           <ButtonLink href="/projects/new" variant="primary">
             New project

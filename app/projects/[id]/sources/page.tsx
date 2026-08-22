@@ -4,6 +4,7 @@ import { getProject, listSourceDocuments } from "@/lib/db/queries";
 import { prisma } from "@/lib/db/client";
 import { formatDate, formatDateTime, pluralize, truncate, wordCount } from "@/lib/utils";
 import { currentUserCan } from "@/lib/auth/access";
+import { displayName, displayNameOr } from "@/lib/auth/display-name";
 import {
   ButtonLink,
   Card,
@@ -121,7 +122,7 @@ export default async function SourcesPage({
                           </span>
                           {source.uploadedBy ? (
                             <>
-                              <span>by {source.uploadedBy.name}</span>
+                              <span>by {displayName(source.uploadedBy)}</span>
                               {source.uploaderRole ? (
                                 <RoleBadge role={source.uploaderRole} />
                               ) : null}
@@ -137,7 +138,7 @@ export default async function SourcesPage({
                       <div className="px-5 pb-3.5">
                         {source.validationStatus === "validated" ? (
                           <p className="text-[11px] text-positive">
-                            Validated by {source.validatedBy?.name ?? "a former member"}
+                            Validated by {displayNameOr(source.validatedBy, "a former member")}
                             {source.validatedAt
                               ? ` on ${formatDate(source.validatedAt)}`
                               : null}
@@ -147,7 +148,7 @@ export default async function SourcesPage({
                           </p>
                         ) : source.validationStatus === "rejected" ? (
                           <p className="text-[11px] text-critical">
-                            Rejected by {source.validatedBy?.name ?? "a former member"}
+                            Rejected by {displayNameOr(source.validatedBy, "a former member")}
                             {source.validatedAt
                               ? ` on ${formatDate(source.validatedAt)}`
                               : null}

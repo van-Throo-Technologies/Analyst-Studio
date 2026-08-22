@@ -84,7 +84,9 @@ export type DomainProfile = {
 export type User = {
   id: string;
   email: string;
-  name: string;
+  /** Null until the person supplies one — a magic-link sign-in carries no name.
+   *  Render it through `displayName()` in lib/auth/display-name.ts, never raw. */
+  name: string | null;
   createdAt: Date;
 };
 

@@ -1,5 +1,6 @@
 import type { ProjectMember } from "@/lib/schemas/entities";
 import { PROJECT_ROLE_HINTS, PROJECT_ROLE_LABELS } from "@/lib/schemas/enums";
+import { displayName } from "@/lib/auth/display-name";
 import { cn } from "@/lib/utils";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui";
 
@@ -50,7 +51,7 @@ export function TeamCard({
                 )}
               >
                 <span className="min-w-0 text-sm text-ink">
-                  {member.user.name}
+                  {displayName(member.user)}
                   {isYou ? (
                     <span className="ml-1.5 text-[11px] text-accent">you</span>
                   ) : null}

@@ -5,6 +5,7 @@ import { validateSourceAction } from "@/app/projects/[id]/sources/actions";
 import type { FormState } from "@/lib/forms";
 import type { SourceDocumentWithUploader } from "@/lib/schemas/entities";
 import { VALIDATION_STATUS_HINTS } from "@/lib/schemas/enums";
+import { displayNameOr } from "@/lib/auth/display-name";
 import { formatDateTime } from "@/lib/utils";
 import {
   Button,
@@ -74,7 +75,7 @@ export function SourceValidation({
           <div className="rounded-md border border-line bg-surface-muted px-3.5 py-2.5 text-sm">
             <p className="text-ink-soft">
               {source.validationStatus === "validated" ? "Validated" : "Rejected"} by{" "}
-              {source.validatedBy?.name ?? "someone no longer on this project"}
+              {displayNameOr(source.validatedBy, "someone no longer on this project")}
               {source.validatedAt ? ` on ${formatDateTime(source.validatedAt)}` : null}.
             </p>
             {source.validationNotes.length > 0 ? (

@@ -13,6 +13,7 @@
  */
 
 import { prisma } from "../lib/db/client";
+import { displayName } from "../lib/auth/display-name";
 import { recordProjectAudit, SYSTEM_ACTOR } from "../lib/audit/log";
 import type { ProjectRole } from "../lib/schemas/enums";
 
@@ -29,7 +30,10 @@ const PEOPLE: { email: string; name: string; role: ProjectRole | null }[] = [
 ];
 
 async function main() {
-  const users = new Map<string, { id: string; name: string }>();
+  const users = new Map<
+    string,
+    { id: string; name: string | null; email: string }
+  >();
 
   for (const person of PEOPLE) {
     const user = await prisma.user.upsert({
@@ -68,7 +72,7 @@ async function main() {
         action: "access_granted",
         entityType: "project_access",
         entityId: user.id,
-        changesSummary: `${user.name} added as ${person.role} by the multi-user retrofit`,
+        changesSummary: `${displayName(user)} added as ${person.role} by the multi-user retrofit`,
         changedBy: "migration",
       });
       granted += 1;
@@ -80,7 +84,7 @@ async function main() {
         where: { id: project.id },
         data: { ownerId: owner.id },
       });
-      console.log(`  Set owner of "${project.name}" to ${owner.name}.`);
+      console.log(`  Set owner of "${project.name}" to ${displayName(owner)}.`);
     }
   }
 
@@ -101,11 +105,11 @@ async function main() {
         projectId: project.id,
         action: "source_updated",
         entityType: "source_document",
-        changesSummary: `${unattributed} source${unattributed === 1 ? "" : "s"} predating uploader tracking attributed to ${owner.name}`,
+        changesSummary: `${unattributed} source${unattributed === 1 ? "" : "s"} predating uploader tracking attributed to ${displayName(owner)}`,
         changedBy: SYSTEM_ACTOR,
       });
     }
-    console.log(`  Attributed ${unattributed} pre-existing source(s) to ${owner.name}.`);
+    console.log(`  Attributed ${unattributed} pre-existing source(s) to ${displayName(owner)}.`);
   }
 
   console.log(`${granted} access grant(s) created across ${projects.length} project(s).`);
