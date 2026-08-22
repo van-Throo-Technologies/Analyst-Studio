@@ -32,6 +32,10 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...except the template. README opens with `cp .env.example .env`, which only
+# works if the template is actually in the repo. It holds names and comments,
+# never values.
+!.env.example
 
 # vercel
 .vercel

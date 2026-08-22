@@ -27,6 +27,27 @@ npm run dev
 
 Open <http://localhost:3000>.
 
+### Signing in
+
+Sign-in is optional to run the app. Out of the box no provider is configured, and the header carries
+a development switcher that moves you between the seven seeded users — which is how per-project
+access control is exercised while building.
+
+Set either block in `.env` to turn real sign-in on; the switcher disappears by itself.
+
+- **Google** — `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` from a Google Cloud OAuth client, with
+  `http://localhost:3000/api/auth/callback/google` as an authorised redirect URI.
+- **Magic link** — `RESEND_API_KEY`, plus an `EMAIL_FROM` on a domain verified in Resend.
+
+Either way, set `AUTH_SECRET` (`openssl rand -base64 32`).
+
+Signing in creates an account; it does not grant access to anything. Someone with `manage_access` on
+a project still has to add the person to it.
+
+> A production build with no provider configured signs nobody in — the switcher is development-only.
+> That is intentional: the alternative is a deploy that quietly treats every visitor as the first
+> seeded user.
+
 **Without an API key** everything except the AI jobs works: you can add sources, build the
 requirement model by hand, run quality checks, generate packs (the lists are complete; the narrative
 sections say plainly that they were not written) and export. `npm run db:seed:model` populates a

@@ -1,34 +1,58 @@
 import "server-only";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { auth, isAuthConfigured } from "@/auth";
 import { prisma } from "@/lib/db/client";
 import type { User } from "@/lib/schemas/entities";
 
 /**
  * ============================================================================
- * MOCKED AUTHENTICATION — THE ONLY PLACE TO REPLACE WHEN REAL AUTH LANDS
+ * THE ONLY PLACE THAT RESOLVES IDENTITY
  * ============================================================================
  *
- * There is no authentication in this MVP. `getCurrentUser()` resolves the
- * acting user from a dev-only cookie, falling back to the first user in the
- * database. Everything else in the app — access checks, audit attribution,
- * source uploader tracking — goes through this function and needs no change
- * when it is replaced.
+ * Access checks, audit attribution and source uploader tracking all go through
+ * `getCurrentUser()`. Nothing else reads a session or a cookie.
  *
- * To swap in real auth:
- *   1. Replace the body of `getCurrentUser()` with a session lookup.
- *   2. Delete `setDevUser()`, `listSelectableUsers()` and the dev user switcher
- *      component that calls them (components/layout/dev-user-switcher.tsx).
- *   3. Have `requireCurrentUser()` redirect to a sign-in page instead of
- *      throwing.
+ * There are two paths, and which one is live depends on configuration rather
+ * than on a flag someone has to remember to flip:
  *
- * The cookie is not a security boundary and is not pretending to be one. It is
- * a way to act as different people while building, so per-project access
- * control can actually be exercised.
+ *   1. A real Auth.js session, whenever any provider is configured.
+ *   2. The development user switcher, only when none is.
+ *
+ * The second path exists because the seeded cast is how per-project access
+ * control is actually exercised — switching to Rachel Osei (REVIEWER) must make
+ * every edit control refuse, and Nadia Haddad must see nothing at all. Deleting
+ * it the moment Auth.js landed would mean nobody could test authorisation until
+ * a Google OAuth app existed, which is the wrong order to do the work in.
+ *
+ * It is fenced twice. `isAuthConfigured()` must be false, *and* NODE_ENV must
+ * not be production. Both conditions failing closed means a production deploy
+ * that is missing its credentials shows nobody rather than showing everybody
+ * the first seeded user — the failure mode worth engineering against here is
+ * not "login is broken", it is "login is broken and everyone is Janine".
  */
 
 const DEV_USER_COOKIE = "as_dev_user";
 
+/** Whether the development switcher is permitted to resolve a user at all. */
+export function devSwitcherEnabled(): boolean {
+  return process.env.NODE_ENV !== "production" && !isAuthConfigured();
+}
+
 export async function getCurrentUser(): Promise<User | null> {
+  if (isAuthConfigured()) {
+    const session = await auth();
+    const id = session?.user?.id;
+    if (!id) return null;
+
+    // The session carries a snapshot; the row is the truth. Reading it means a
+    // rename or a deletion takes effect on the next request rather than
+    // whenever the session happens to be refreshed.
+    return prisma.user.findUnique({ where: { id } });
+  }
+
+  if (!devSwitcherEnabled()) return null;
+
   const store = await cookies();
   const requestedId = store.get(DEV_USER_COOKIE)?.value;
 
@@ -44,26 +68,38 @@ export async function getCurrentUser(): Promise<User | null> {
 }
 
 /**
- * For code paths that cannot proceed without a user. Throws rather than
- * returning null so a caller can never silently act as nobody.
+ * For code paths that cannot proceed without a user.
+ *
+ * Redirects to sign-in when auth is live, and throws only in the development
+ * case, where there is no sign-in page to send anyone to and an empty user
+ * table is a setup mistake worth saying out loud.
  */
 export async function requireCurrentUser(): Promise<User> {
   const user = await getCurrentUser();
-  if (!user) {
-    throw new Error(
-      "No users exist. Run `npm run db:seed:users` to create the development users.",
-    );
-  }
-  return user;
+  if (user) return user;
+
+  if (isAuthConfigured()) redirect("/login");
+
+  throw new Error(
+    "No users exist. Run `npm run db:seed:users` to create the development users.",
+  );
 }
 
-/** Dev-only: everyone who can be acted as. Delete when real auth lands. */
+/**
+ * Dev-only: everyone who can be acted as.
+ *
+ * Returns nothing once auth is configured, so the switcher in the header
+ * disappears on its own rather than needing to be torn out.
+ */
 export async function listSelectableUsers(): Promise<User[]> {
+  if (!devSwitcherEnabled()) return [];
   return prisma.user.findMany({ orderBy: { createdAt: "asc" } });
 }
 
-/** Dev-only: switch the acting user. Delete when real auth lands. */
+/** Dev-only: switch the acting user. A no-op once auth is configured. */
 export async function setDevUser(userId: string): Promise<void> {
+  if (!devSwitcherEnabled()) return;
+
   const store = await cookies();
   store.set(DEV_USER_COOKIE, userId, {
     httpOnly: true,

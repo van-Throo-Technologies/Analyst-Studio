@@ -77,9 +77,19 @@ records the conventions that are easy to break by accident.
 
 ## Working without auth
 
-Seven users exist (`npm run db:seed:users`); switch between them with the picker in the header.
-Rachel Osei is a REVIEWER (read-only) and Nadia Haddad has no access to anything — use those two to
-check that a change actually enforces access rather than merely hiding a button.
+Sign-in is Auth.js (NextAuth v5) — Google, or a Resend magic link. Neither is configured by default,
+and that is the supported way to work: with no provider set, `getCurrentUser()` falls back to the dev
+switcher in the header and the seven seeded users (`npm run db:seed:users`). Rachel Osei is a
+REVIEWER (read-only) and Nadia Haddad has no access to anything — use those two to check that a
+change actually enforces access rather than merely hiding a button.
+
+The two modes are mutually exclusive by construction, not by a flag: `isAuthConfigured()` in
+`auth.ts` reads the environment, the account menu renders only when it is true, and
+`listSelectableUsers()` returns nothing in that case so the switcher removes itself.
+
+The switcher is fenced twice — it needs `isAuthConfigured()` false **and** `NODE_ENV !== production`.
+So a production build with no credentials locks everyone out rather than signing everybody in as the
+first seeded user. That is deliberate; `npm start` without auth configured is meant to be unusable.
 
 ## Review scoping
 

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
+import { AccountMenu } from "@/components/layout/account-menu";
 import { DevUserSwitcher } from "@/components/layout/dev-user-switcher";
 import "./globals.css";
 
@@ -37,6 +38,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             </Link>
             <span className="text-xs text-ink-faint">MVP</span>
             <div className="ml-auto">
+              {/* Exactly one of these renders: the switcher when no provider is
+                  configured, the account menu when one is. */}
+              <AccountMenu />
               <DevUserSwitcher />
             </div>
           </div>
