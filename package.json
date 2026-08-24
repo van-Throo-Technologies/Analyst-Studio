@@ -22,7 +22,6 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.117.1",
     "@auth/prisma-adapter": "^2.11.3",
-    "@prisma/adapter-better-sqlite3": "^7.9.1",
     "@prisma/client": "^7.9.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.32.0",
