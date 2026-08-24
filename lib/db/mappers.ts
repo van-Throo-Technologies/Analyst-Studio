@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type * as Rows from "@/lib/generated/prisma/client";
+import type * as Rows from "@prisma/client";
 import {
   analysisModeSchema,
   auditActionSchema,
