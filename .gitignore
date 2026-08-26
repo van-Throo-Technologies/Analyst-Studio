@@ -1,2 +1,14 @@
 node_modules/
 .next/
+
+# env files — every variant. This repo has already leaked credentials once
+# because only `.env.local` was listed; `.env` and `.env.*.local` were not.
+.env*
+# ...except the template, which holds names and comments, never values.
+!.env.example
+
+# OS noise
+.DS_Store
+
+# generated Prisma client, if the generator is pointed at a repo path
+/lib/generated/prisma
