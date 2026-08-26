@@ -4,7 +4,14 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = "postgresql://postgres: Ti-@ita69T@ch4you@db.vnzgtihpqfuutnhyezfz.supabase.co:5432/postgres"
+  // Never inline the URL here — this file is tracked, and a password committed
+  // to git is a password that must be rotated. The value lives in .env.
+  //
+  // Reserved characters in the password must be percent-encoded (@ -> %40,
+  // % -> %25, and likewise : / ? # [ ] and space). This project's password
+  // contains two @ signs; unencoded, the parser mis-splits the authority and
+  // Postgres answers P1000 "credentials are not valid" even though they are.
+  url      = env("DATABASE_URL")
 }
 
 model User {
