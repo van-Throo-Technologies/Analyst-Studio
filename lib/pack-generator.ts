@@ -69,6 +69,8 @@ function inPack(requirement: LoadedRequirement, kind: "ba" | "fa") {
   return requirement.packVariant === "both" || requirement.packVariant === kind;
 }
 
+const isKind = (kind: string) => (r: LoadedRequirement) => r.recordType === kind;
+
 function entry(
   requirement: LoadedRequirement,
   details: { label: string; items: string[] }[],
@@ -90,7 +92,11 @@ export async function generateBAPack(projectId: string): Promise<Pack | null> {
   const project = await loadProjectOrdered(projectId);
   if (!project) return null;
 
-  const requirements = project.requirements.filter((r) => inPack(r, "ba"));
+  const all = project.requirements.filter((r) => inPack(r, "ba"));
+  const requirements = all.filter(isKind("feature"));
+  const rules = all.filter(isKind("business-rule"));
+  const constraints = all.filter(isKind("regulatory-constraint"));
+  const useCases = all.filter(isKind("use-case"));
   const inScope = requirements.filter((r) => r.scope !== "out-of-scope");
   const outOfScope = requirements.filter((r) => r.scope === "out-of-scope");
 
@@ -157,20 +163,31 @@ export async function generateBAPack(projectId: string): Promise<Pack | null> {
     },
     {
       heading: "Business rules",
-      bullets: unique(requirements.flatMap((r) => lines(r.businessRule))),
+      entries: rules.map((r) =>
+        entry(r, [{ label: "Rule", items: lines(r.businessRule) }]),
+      ),
       emptyNote: "No policies or rules were stated in the material.",
     },
     {
+      heading: "Regulatory constraints",
+      entries: constraints.map((r) =>
+        entry(r, [
+          { label: "Obligation", items: lines(r.businessRule) },
+          // The framework is stored in validation for constraint records.
+          { label: "Framework", items: r.validation ? [r.validation] : [] },
+        ]),
+      ),
+      emptyNote: "No external obligations were identified in the material.",
+    },
+    {
       heading: "High-level use cases",
-      entries: requirements
-        .filter((r) => r.actor || r.trigger || r.happyPath)
-        .map((r) =>
-          entry(r, [
-            { label: "Actor", items: r.actor ? [r.actor] : [] },
-            { label: "Trigger", items: r.trigger ? [r.trigger] : [] },
-          ]),
-        ),
-      emptyNote: "No requirement described an actor, trigger or flow.",
+      entries: useCases.map((r) =>
+        entry(r, [
+          { label: "Actor", items: r.actor ? [r.actor] : [] },
+          { label: "Trigger", items: r.trigger ? [r.trigger] : [] },
+        ]),
+      ),
+      emptyNote: "No journeys through the system were described.",
     },
     {
       heading: "Business acceptance criteria",
@@ -203,7 +220,10 @@ export async function generateFAPack(projectId: string): Promise<Pack | null> {
   const project = await loadProjectOrdered(projectId);
   if (!project) return null;
 
-  const requirements = project.requirements.filter((r) => inPack(r, "fa"));
+  const all = project.requirements.filter((r) => inPack(r, "fa"));
+  const requirements = all.filter(isKind("feature"));
+  const useCases = all.filter(isKind("use-case"));
+  const constraints = all.filter(isKind("regulatory-constraint"));
   const buildable = requirements.filter((r) => r.scope !== "out-of-scope");
 
   const sections: PackSection[] = [
@@ -227,9 +247,18 @@ export async function generateFAPack(projectId: string): Promise<Pack | null> {
       emptyNote: "No performance, security or availability constraints were captured.",
     },
     {
+      heading: "Regulatory constraints on the build",
+      entries: constraints.map((r) =>
+        entry(r, [
+          { label: "Obligation", items: lines(r.businessRule) },
+          { label: "Framework", items: r.validation ? [r.validation] : [] },
+        ]),
+      ),
+      emptyNote: "No external obligations constrain this build.",
+    },
+    {
       heading: "Detailed use cases",
-      entries: buildable
-        .filter((r) => r.happyPath || lines(r.alternateFlows).length > 0)
+      entries: [...useCases, ...buildable.filter((r) => r.happyPath || lines(r.alternateFlows).length > 0)]
         .map((r) =>
           entry(r, [
             { label: "Precondition", items: lines(r.precondition) },

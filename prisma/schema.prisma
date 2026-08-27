@@ -145,6 +145,21 @@ model Requirement {
   projectId       String
   title           String
   description     String   @db.Text
+
+  // What KIND of record this is. Distinct from `type` below, which classifies a
+  // feature as Functional / Business / Non-Functional / Data / Integration —
+  // that stays, because a feature is still one of those. This says whether the
+  // row is a feature at all, or a rule, a constraint, a journey, or a single
+  // acceptance criterion. Defaulting to "feature" backfills every existing row.
+  recordType      String   @default("feature")
+
+  // Children point at the feature they belong to. Null for top-level records.
+  // onDelete: Cascade so deleting a feature takes its rules and criteria with
+  // it rather than leaving them orphaned and unreachable.
+  parentRequirementId String?
+  parent          Requirement?  @relation("RequirementChildren", fields: [parentRequirementId], references: [id], onDelete: Cascade)
+  children        Requirement[] @relation("RequirementChildren")
+
   type            String
   priority        String
   

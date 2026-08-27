@@ -15,6 +15,27 @@ export const REQUIREMENT_TYPES = [
 
 export const PRIORITIES = ["High", "Medium", "Low"] as const;
 
+// What kind of record a row is. Orthogonal to REQUIREMENT_TYPES above, which
+// classifies a *feature* as Functional / Business / and so on — a record can be
+// a feature that is Functional, or a business rule that is none of those.
+export const RECORD_TYPES = [
+  "feature",
+  "business-rule",
+  "regulatory-constraint",
+  "use-case",
+  "acceptance-criteria",
+] as const;
+
+export const RECORD_TYPE_LABELS: Record<string, string> = {
+  feature: "Feature",
+  "business-rule": "Business Rule",
+  "regulatory-constraint": "Regulatory Constraint",
+  "use-case": "Use Case",
+  "acceptance-criteria": "Acceptance Criterion",
+};
+
+export type RecordType = (typeof RECORD_TYPES)[number];
+
 export const SCOPES = ["in-scope", "out-of-scope"] as const;
 
 // Which analyst pack a requirement belongs in. "both" is the default because a

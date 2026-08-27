@@ -10,7 +10,11 @@ import {
   ExtractionSchema,
   EXTRACTION_SYSTEM,
   ExtractionError,
+  SubtypeSchema,
+  SUBTYPE_SYSTEM,
+  parseStreamed,
   type ExtractedRequirement,
+  type Subtypes,
 } from "./extract-core";
 import { verifyEvidence } from "./grounding";
 import { runAllChecks, type CheckableRequirement } from "./quality-checker";
@@ -27,6 +31,7 @@ export type { ExtractedRequirement };
 
 export type PipelineStage =
   | "extract"
+  | "subtypes"
   | "ground"
   | "repair"
   | "coverage"
@@ -71,10 +76,11 @@ async function callExtraction(
 ): Promise<ExtractedRequirement[]> {
   const stream = getClient().messages.stream({
     model: "claude-opus-5",
-    // A multi-document brief can yield 30+ requirements, each carrying a dozen
-    // fields plus quotes. At 32k the reply was truncated mid-JSON and the whole
-    // run was lost. Streaming permits up to 128k; this leaves real headroom.
-    max_tokens: 64000,
+    // A multi-document brief runs long: the KYC case yields ~60 features, each
+    // carrying a dozen fields plus quotes. It truncated at 32k, then again at
+    // 64k. This is the model ceiling — beyond it the answer is to split the
+    // material, not to ask for a bigger reply.
+    max_tokens: 128000,
     thinking: { type: "adaptive" },
     system: EXTRACTION_SYSTEM,
     messages: [
@@ -129,7 +135,7 @@ async function callExtraction(
     .join("");
 
   try {
-    return ExtractionSchema.parse(JSON.parse(text)).requirements;
+    return ExtractionSchema.parse(JSON.parse(text)).features;
   } catch {
     throw new ExtractionError(
       message.stop_reason === "max_tokens"
@@ -139,8 +145,18 @@ async function callExtraction(
   }
 }
 
+const EMPTY_SUBTYPES: Subtypes = {
+  businessRules: [],
+  regulatoryConstraints: [],
+  useCases: [],
+};
+
 export type PipelineResult = {
   requirements: ExtractedRequirement[];
+  extras: Subtypes;
+  // The assembled source, kept so child records can be grounded at save time
+  // against exactly the text the model was shown.
+  material: string;
   grounding: Map<number, { verified: string[]; isGrounded: boolean }>;
   coverageScore: number;
   coverageGaps: Awaited<ReturnType<typeof findCoverageGaps>>["gaps"];
@@ -160,6 +176,21 @@ export async function runPipeline(
   let requirements = await callExtraction(material, (found) =>
     emit({ type: "progress", found }),
   );
+
+  // --- subtypes -----------------------------------------------------------
+  // A second call, given the feature titles just produced so that every child
+  // links to a title that really exists. Repair, grounding and the audit passes
+  // below operate on features only: the child kinds are short quoted statements
+  // with far less room to be vague, and running them through a pass that
+  // restates everything would multiply the slowest stage for little gain.
+  emit({ type: "stage", stage: "subtypes", label: "Separating rules, constraints and use cases" });
+  const titles = requirements.map((r) => `- ${r.title}`).join("\n");
+  const extras =
+    (await parseStreamed(SubtypeSchema, {
+      system: SUBTYPE_SYSTEM,
+      content: `Source material:\n\n${material}\n\nFeature titles already extracted:\n\n${titles || "(none)"}`,
+      maxTokens: 32000,
+    })) ?? EMPTY_SUBTYPES;
 
   // --- repair -------------------------------------------------------------
   // The deterministic checks run here, before anything is written, so they act
@@ -200,6 +231,8 @@ export async function runPipeline(
 
   return {
     requirements,
+    extras,
+    material,
     grounding,
     coverageScore: coverage.score,
     coverageGaps: coverage.gaps,
@@ -222,16 +255,25 @@ export async function savePipelineResult(projectId: string, result: PipelineResu
     select: { id: true, filename: true },
   });
   const idByFilename = new Map(documents.map((d) => [d.filename, d.id]));
+  const allDocumentIds = documents.map((d) => d.id);
 
-  const rows = result.requirements.map((r, index) => {
-    const sourceIds = r.sourceFilenames
+  const traceIds = (filenames: string[]) => {
+    const ids = filenames
       .map((filename) => idByFilename.get(filename))
       .filter((id): id is string => Boolean(id));
+    // Extraction covers the whole document set, so a record naming no source
+    // fell back to all of them rather than none.
+    return JSON.stringify(ids.length > 0 ? ids : allDocumentIds);
+  };
 
+  const material = result.material;
+
+  const featureRows = result.requirements.map((r, index) => {
     const ground = result.grounding.get(index);
-
     return {
       projectId,
+      recordType: "feature",
+      parentRequirementId: null as string | null,
       title: r.title,
       description: r.description,
       type: r.type,
@@ -251,11 +293,7 @@ export async function savePipelineResult(projectId: string, result: PipelineResu
       precondition: r.precondition,
       validation: r.validation,
       dependency: r.dependsOn.join("\n") || null,
-      // Every extraction covers the whole document set, so a requirement with no
-      // named source fell back to all of them rather than none.
-      sourceDocumentIds: JSON.stringify(
-        sourceIds.length > 0 ? sourceIds : documents.map((d) => d.id),
-      ),
+      sourceDocumentIds: traceIds(r.sourceFilenames),
       // Only quotes that survived the literal match are stored. An unverified
       // quote is not evidence, and keeping it would let it pass as evidence.
       evidence: JSON.stringify(ground?.verified ?? []),
@@ -263,11 +301,117 @@ export async function savePipelineResult(projectId: string, result: PipelineResu
     };
   });
 
-  await prisma.$transaction([
-    prisma.requirement.deleteMany({ where: { projectId, isEdited: false } }),
-    prisma.requirement.createMany({ data: rows }),
-    prisma.projectFinding.deleteMany({ where: { projectId } }),
-    prisma.projectFinding.createMany({
+  await prisma.$transaction(async (tx) => {
+    // Deleting a feature cascades to its children, so orphaned rules and
+    // criteria cannot survive a re-run. Hand-edited records are left alone.
+    await tx.requirement.deleteMany({ where: { projectId, isEdited: false } });
+    await tx.requirement.createMany({ data: featureRows });
+
+    // Children link by title, so the parents must exist before they are read.
+    const saved = await tx.requirement.findMany({
+      where: { projectId, recordType: "feature" },
+      select: { id: true, title: true },
+    });
+    const featureIdByTitle = new Map(saved.map((f) => [f.title, f.id]));
+    const parentIdFor = (title: string | null) =>
+      title ? featureIdByTitle.get(title) ?? null : null;
+
+    // Child records are grounded the same way features are: the quote either
+    // appears in the source or it is not stored.
+    const groundChild = (quotes: string[]) => {
+      const { verified, isGrounded } = verifyEvidence(quotes, material);
+      return { evidence: JSON.stringify(verified), isGrounded };
+    };
+
+    const childRows = [
+      ...result.extras.businessRules.map((rule) => ({
+        projectId,
+        recordType: "business-rule",
+        parentRequirementId: parentIdFor(rule.parentFeatureTitle),
+        title: rule.title,
+        description: rule.description,
+        // The rule itself lives in businessRule, which is where every reader
+        // and every export already looks for one.
+        businessRule: rule.statement,
+        type: "Business",
+        priority: "Medium",
+        completionScore: 0,
+        sourceDocumentIds: traceIds(rule.sourceFilenames),
+        ...groundChild(rule.evidence),
+      })),
+
+      ...result.extras.regulatoryConstraints.map((constraint) => ({
+        projectId,
+        recordType: "regulatory-constraint",
+        parentRequirementId: parentIdFor(constraint.parentFeatureTitle),
+        title: constraint.title,
+        description: constraint.description,
+        businessRule: constraint.statement,
+        // The naming framework, where the source gave one. Kept in validation
+        // rather than invented into the title.
+        validation: constraint.framework,
+        type: "Non-Functional",
+        priority: "High",
+        completionScore: 0,
+        sourceDocumentIds: traceIds(constraint.sourceFilenames),
+        ...groundChild(constraint.evidence),
+      })),
+
+      ...result.extras.useCases.map((useCase) => ({
+        projectId,
+        recordType: "use-case",
+        parentRequirementId: parentIdFor(useCase.parentFeatureTitle),
+        title: useCase.title,
+        description: useCase.description,
+        actor: useCase.actor,
+        trigger: useCase.trigger,
+        precondition: useCase.precondition,
+        happyPath: useCase.mainFlow,
+        alternateFlows: useCase.alternateFlows.join("\n") || null,
+        type: "Functional",
+        priority: "Medium",
+        completionScore: 0,
+        sourceDocumentIds: traceIds(useCase.sourceFilenames),
+        ...groundChild(useCase.evidence),
+      })),
+
+      // Acceptance criteria are split out of the parent's own fields rather
+      // than asked of the model. The lines already exist; turning them into
+      // rows costs nothing, where asking for hundreds more objects would have
+      // truncated the reply that produced them.
+      ...saved.flatMap((feature) => {
+        const parent = featureRows.find((f) => f.title === feature.title);
+        if (!parent) return [];
+        const criteria = [
+          ...(parent.bdDAC ?? "").split("\n"),
+          ...(parent.checklistAC ?? "").split("\n"),
+        ]
+          .map((line) => line.trim())
+          .filter(Boolean);
+
+        return criteria.map((line) => ({
+          projectId,
+          recordType: "acceptance-criteria",
+          parentRequirementId: feature.id,
+          // The criterion is the title; a separate description would restate it.
+          title: line.length > 180 ? `${line.slice(0, 177)}…` : line,
+          description: line,
+          type: parent.type,
+          priority: parent.priority,
+          completionScore: 0,
+          sourceDocumentIds: parent.sourceDocumentIds,
+          // Inherited: the criterion came out of a parent whose evidence was
+          // already checked, and it is not separately quotable.
+          evidence: JSON.stringify([]),
+          isGrounded: parent.isGrounded,
+        }));
+      }),
+    ];
+
+    if (childRows.length > 0) await tx.requirement.createMany({ data: childRows });
+
+    await tx.projectFinding.deleteMany({ where: { projectId } });
+    await tx.projectFinding.createMany({
       data: [
         ...result.coverageGaps.map((gap) => ({
           projectId,
@@ -286,10 +430,11 @@ export async function savePipelineResult(projectId: string, result: PipelineResu
           severity: gap.severity,
         })),
       ],
-    }),
-    prisma.project.update({
+    });
+
+    await tx.project.update({
       where: { id: projectId },
       data: { coverageScore: result.coverageScore },
-    }),
-  ]);
+    });
+  });
 }

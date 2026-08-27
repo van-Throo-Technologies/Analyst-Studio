@@ -53,6 +53,7 @@ export type CheckableRequirement = {
   // verified, as well as against saved requirements afterwards.
   isGrounded?: boolean;
   validationGates?: string | null;
+  recordType?: string;
 };
 
 function lines(value: string | null): string[] {
@@ -322,7 +323,15 @@ export function checkPriorityBalance(requirements: CheckableRequirement[]): Qual
 
 const SEVERITY_WEIGHT: Record<Severity, number> = { high: 5, medium: 2, low: 1 };
 
-export function runAllChecks(requirements: CheckableRequirement[]): QualityReport {
+export function runAllChecks(all: CheckableRequirement[]): QualityReport {
+  // Only features are held to these standards. A business rule has no
+  // acceptance criteria and no alternate flows by design, and a use case is not
+  // a duplicate of the feature it exercises — checking them would manufacture
+  // findings out of records that are correct as they are.
+  const requirements = all.filter(
+    (r) => r.recordType === undefined || r.recordType === "feature",
+  );
+
   const issues: QualityIssue[] = [
     ...requirements.flatMap(checkGrounding),
     ...requirements.flatMap(checkAmbiguity),

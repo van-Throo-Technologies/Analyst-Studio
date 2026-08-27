@@ -1,5 +1,6 @@
 import type { RequirementRecord } from "../lib/projects";
 import { RequirementEditor } from "./RequirementEditor";
+import { RECORD_TYPE_LABELS } from "../lib/constants";
 import styles from "./RequirementsList.module.css";
 
 // Multi-value fields are stored newline-joined, so they come back apart the
@@ -20,6 +21,14 @@ function quotes(value: string | null): string[] {
 function lines(value: string | null) {
   if (!value) return [];
   return value.split("\n").map((line) => line.trim()).filter(Boolean);
+}
+
+function recordTypeClass(recordType: string) {
+  if (recordType === "business-rule") return styles.kindRule;
+  if (recordType === "regulatory-constraint") return styles.kindRegulatory;
+  if (recordType === "use-case") return styles.kindUseCase;
+  if (recordType === "acceptance-criteria") return styles.kindCriterion;
+  return styles.kindFeature;
 }
 
 function priorityClass(priority: string) {
@@ -81,6 +90,9 @@ function RequirementCard({
   return (
     <li className={styles.card}>
       <div className={styles.badges}>
+        <span className={`${styles.kind} ${recordTypeClass(requirement.recordType)}`}>
+          {RECORD_TYPE_LABELS[requirement.recordType] ?? requirement.recordType}
+        </span>
         {requirement.isGrounded ? (
           <span className={styles.grounded} title="Every supporting quote was found in the source">
             Evidence-backed
@@ -169,6 +181,28 @@ function RequirementCard({
   );
 }
 
+// Children render beneath the feature they hang off, so a reader sees a feature
+// and the rules that govern it together rather than as unrelated rows.
+function ChildRow({ record }: { record: RequirementRecord }) {
+  const statement = record.businessRule ?? record.description;
+  return (
+    <li className={styles.child}>
+      <span className={`${styles.kind} ${recordTypeClass(record.recordType)}`}>
+        {RECORD_TYPE_LABELS[record.recordType] ?? record.recordType}
+      </span>
+      <div className={styles.childBody}>
+        <p className={styles.childTitle}>{record.title}</p>
+        {statement !== record.title && (
+          <p className={styles.childDetail}>{statement}</p>
+        )}
+        {record.validation && (
+          <span className={styles.framework}>{record.validation}</span>
+        )}
+      </div>
+    </li>
+  );
+}
+
 export function RequirementsList({
   requirements,
   projectId,
@@ -176,6 +210,26 @@ export function RequirementsList({
   requirements: RequirementRecord[];
   projectId: string;
 }) {
+  const features = requirements.filter((r) => r.recordType === "feature");
+  const childrenByParent = new Map<string, RequirementRecord[]>();
+  const orphans: RequirementRecord[] = [];
+
+  for (const record of requirements) {
+    if (record.recordType === "feature") continue;
+    if (!record.parentRequirementId) {
+      orphans.push(record);
+      continue;
+    }
+    const list = childrenByParent.get(record.parentRequirementId) ?? [];
+    list.push(record);
+    childrenByParent.set(record.parentRequirementId, list);
+  }
+
+  const counts = requirements.reduce<Record<string, number>>((acc, r) => {
+    acc[r.recordType] = (acc[r.recordType] ?? 0) + 1;
+    return acc;
+  }, {});
+
   if (requirements.length === 0) {
     return (
       <section className={styles.empty}>
@@ -191,17 +245,53 @@ export function RequirementsList({
 
   return (
     <section>
-      <h2 className={styles.heading}>
-        {requirements.length} requirement{requirements.length === 1 ? "" : "s"}
-      </h2>
+      <div className={styles.summary}>
+        <h2 className={styles.heading}>
+          {requirements.length} record{requirements.length === 1 ? "" : "s"}
+        </h2>
+        <div className={styles.tally}>
+          {Object.entries(counts)
+            .sort((a, b) => b[1] - a[1])
+            .map(([kind, n]) => (
+              <span key={kind} className={`${styles.kind} ${recordTypeClass(kind)}`}>
+                {n} {RECORD_TYPE_LABELS[kind] ?? kind}
+                {n === 1 ? "" : kind === "acceptance-criteria" ? "" : "s"}
+              </span>
+            ))}
+        </div>
+      </div>
+
       <ul className={styles.list}>
-        {requirements.map((requirement) => (
-          <RequirementCard
-            key={requirement.id}
-            requirement={requirement}
-            projectId={projectId}
-          />
-        ))}
+        {features.map((feature) => {
+          const children = childrenByParent.get(feature.id) ?? [];
+          return (
+            <li key={feature.id} className={styles.group}>
+              <ul className={styles.list}>
+                <RequirementCard requirement={feature} projectId={projectId} />
+              </ul>
+              {children.length > 0 && (
+                <ul className={styles.children}>
+                  {children.map((child) => (
+                    <ChildRow key={child.id} record={child} />
+                  ))}
+                </ul>
+              )}
+            </li>
+          );
+        })}
+
+        {/* Records whose parent title did not match a feature. Shown rather
+            than hidden — a rule nobody can find is worse than a loose one. */}
+        {orphans.length > 0 && (
+          <li className={styles.group}>
+            <h3 className={styles.orphanHeading}>Not linked to a feature</h3>
+            <ul className={styles.children}>
+              {orphans.map((record) => (
+                <ChildRow key={record.id} record={record} />
+              ))}
+            </ul>
+          </li>
+        )}
       </ul>
     </section>
   );
