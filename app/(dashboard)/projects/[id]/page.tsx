@@ -14,6 +14,7 @@ import { PackViewer } from "../../../../components/packs/PackViewer";
 import { QualityButton } from "../../../../components/quality/QualityButton";
 import { QualityReport } from "../../../../components/quality/QualityReport";
 import { TraceView } from "../../../../components/trace/TraceView";
+import { GapsPanel } from "../../../../components/gaps/GapsPanel";
 import styles from "./project.module.css";
 
 type Params = { params: Promise<{ id: string }> };
@@ -58,6 +59,7 @@ export default async function ProjectPage({ params }: Params) {
   const quality = runAllChecks(project.requirements);
 
   const editedCount = project.requirements.filter((r) => r.isEdited).length;
+  const groundedCount = project.requirements.filter((r) => r.isGrounded).length;
   const total = project.requirements.length;
 
   const filenameById = new Map(
@@ -105,6 +107,15 @@ export default async function ProjectPage({ params }: Params) {
             {project.sourceDocuments.length} document
             {project.sourceDocuments.length === 1 ? "" : "s"} · {total} requirement
             {total === 1 ? "" : "s"}
+            {total > 0 && (
+              <>
+                {" · "}
+                <span title="Requirements whose supporting quotes were found in the source by literal match">
+                  {groundedCount}/{total} evidence-backed
+                </span>
+              </>
+            )}
+            {project.coverageScore !== null && ` · ${project.coverageScore}% coverage`}
           </p>
         </div>
 
@@ -156,6 +167,18 @@ export default async function ProjectPage({ params }: Params) {
             label: "Quality",
             badge: quality.issues.length,
             content: <QualityReport report={quality} />,
+          },
+          {
+            id: "gaps",
+            label: "Gaps",
+            badge: project.findings.length,
+            content: (
+              <GapsPanel
+                findings={project.findings}
+                coverageScore={project.coverageScore}
+                hasRequirements={total > 0}
+              />
+            ),
           },
           {
             id: "trace",

@@ -86,3 +86,11 @@
   background: var(--color-surface-sunken);
   border-radius: 999px;
 }
+
+.summary {
+  max-width: 22rem;
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: right;
+  color: var(--color-text-muted);
+}

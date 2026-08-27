@@ -78,11 +78,43 @@ model Project {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  // Share of requirement-bearing source content represented by a requirement,
+  // from the coverage pass. Null until extraction has run.
+  coverageScore Int?
+
   user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   sourceDocuments   SourceDocument[]
   requirements      Requirement[]
+  findings          ProjectFinding[]
 
   @@map("project")
+}
+
+// Something the requirement set does not cover.
+//
+// Separate from Requirement because a finding is not a requirement — it is a
+// question to put to a person. Writing them into the requirement list would be
+// exactly the invention this pipeline exists to prevent.
+model ProjectFinding {
+  id        String   @id @default(cuid())
+  projectId String
+
+  // "coverage-gap"   — requirement-bearing content in the source that no
+  //                    requirement represents.
+  // "domain-gap"     — something systems of this kind normally need that
+  //                    nobody in the material raised at all.
+  kind      String
+  title     String
+  detail    String   @db.Text
+  // Verbatim source quote, for coverage gaps. Null for domain gaps, which by
+  // definition are not in the source.
+  evidence  String?  @db.Text
+  severity  String   @default("medium")
+  createdAt DateTime @default(now())
+
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("project_finding")
 }
 
 model SourceDocument {
@@ -140,6 +172,15 @@ model Requirement {
   // and only ever read whole — a relation would add a table and a migration
   // for no query we actually make.
   sourceDocumentIds String? @db.Text
+
+  // --- grounding ---------------------------------------------------------
+  // JSON array of verbatim quotes from the source that support this
+  // requirement. isGrounded is set only when every quote was found in the
+  // source text by literal match — it is a checked fact, not the model's
+  // opinion of its own work. An ungrounded requirement is an inference, and
+  // says so on its face rather than passing as evidence.
+  evidence          String?  @db.Text
+  isGrounded        Boolean  @default(false)
   
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

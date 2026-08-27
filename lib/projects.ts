@@ -32,6 +32,7 @@ export async function getProject(id: string) {
         select: { id: true, filename: true, mimeType: true, uploadedAt: true },
       },
       requirements: { orderBy: { createdAt: "asc" } },
+      findings: { orderBy: [{ severity: "asc" }, { createdAt: "asc" }] },
     },
   });
 }

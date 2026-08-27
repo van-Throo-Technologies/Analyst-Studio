@@ -8,6 +8,7 @@
 // No "server-only": the report renders in a Client Component too.
 
 export type QualityIssueType =
+  | "ungrounded"
   | "ambiguity"
   | "missing-field"
   | "non-testable"
@@ -48,6 +49,10 @@ export type CheckableRequirement = {
   bdDAC: string | null;
   checklistAC: string | null;
   completionScore: number;
+  // Optional so the same checks can run mid-pipeline, before grounding has been
+  // verified, as well as against saved requirements afterwards.
+  isGrounded?: boolean;
+  validationGates?: string | null;
 };
 
 function lines(value: string | null): string[] {
@@ -71,10 +76,37 @@ const VAGUE_TERMS = [
 // can sit down and disprove, which is the whole bar here.
 const MEASURABLE = /\b(\d+|all|no|not|none|every|each|exactly|at least|at most|within|before|after|equal|greater|less|cannot|always|never|only|must)\b/i;
 
+// Only meaningful once grounding has been verified — undefined means the check
+// has not run yet, which is not the same as failing it.
+export function checkGrounding(r: CheckableRequirement): QualityIssue[] {
+  if (r.isGrounded !== false) return [];
+
+  return [
+    {
+      requirementId: r.id,
+      requirementTitle: r.title,
+      type: "ungrounded",
+      severity: "high",
+      message: "No quote from the source could be verified for this requirement.",
+      suggestion:
+        "Treat it as an inference rather than something anyone said. Confirm it with the people involved, or delete it.",
+    },
+  ];
+}
+
 export function checkAmbiguity(r: CheckableRequirement): QualityIssue[] {
   const haystack = `${r.title} ${r.description}`.toLowerCase();
-  const found = VAGUE_TERMS.filter((term) =>
-    new RegExp(`\\b${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(haystack),
+  // Vagueness already raised as an open question has been dealt with — the
+  // requirement is being precise about its own imprecision, which is the
+  // correct outcome when the source itself never said. Reporting it again would
+  // punish the requirement for quoting the person who was vague.
+  const escalated = (r.validationGates ?? "").toLowerCase();
+
+  const word = (term: string) =>
+    new RegExp(`\\b${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`);
+
+  const found = VAGUE_TERMS.filter(
+    (term) => word(term).test(haystack) && !word(term).test(escalated),
   );
   if (found.length === 0) return [];
 
@@ -292,6 +324,7 @@ const SEVERITY_WEIGHT: Record<Severity, number> = { high: 5, medium: 2, low: 1 }
 
 export function runAllChecks(requirements: CheckableRequirement[]): QualityReport {
   const issues: QualityIssue[] = [
+    ...requirements.flatMap(checkGrounding),
     ...requirements.flatMap(checkAmbiguity),
     ...requirements.flatMap(checkMissingFields),
     ...requirements.flatMap(checkTestability),
@@ -324,6 +357,7 @@ export function runAllChecks(requirements: CheckableRequirement[]): QualityRepor
 }
 
 export const ISSUE_LABELS: Record<QualityIssueType, string> = {
+  ungrounded: "No verified evidence",
   ambiguity: "Ambiguous wording",
   "missing-field": "Missing field",
   "non-testable": "Not testable",

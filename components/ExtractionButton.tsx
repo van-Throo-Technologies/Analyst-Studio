@@ -20,6 +20,8 @@ export function ExtractionButton({
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>("idle");
   const [found, setFound] = useState(0);
+  const [stage, setStage] = useState<string | null>(null);
+  const [summary, setSummary] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -42,6 +44,8 @@ export function ExtractionButton({
   async function run() {
     setPhase("running");
     setFound(0);
+    setStage(null);
+    setSummary(null);
     setElapsed(0);
     setError(null);
 
@@ -81,8 +85,20 @@ export function ExtractionButton({
 
           const event = JSON.parse(line.slice(5).trim());
           if (event.type === "progress") setFound(event.found);
-          else if (event.type === "done") finished = true;
-          else if (event.type === "error") failed = event.message;
+          else if (event.type === "stage") {
+            setStage(event.label);
+            // Each stage restarts the count it reports, so the requirement
+            // tally only belongs to the extraction stage that produced it.
+            if (event.stage !== "extract") setFound(0);
+          } else if (event.type === "done") {
+            finished = true;
+            setSummary(
+              `${event.count} requirement${event.count === 1 ? "" : "s"} · ` +
+                `${event.grounded}/${event.count} evidence-backed · ` +
+                `${event.coverageScore}% coverage` +
+                (event.gaps > 0 ? ` · ${event.gaps} gap${event.gaps === 1 ? "" : "s"} to ask about` : ""),
+            );
+          } else if (event.type === "error") failed = event.message;
         }
       }
 
@@ -99,6 +115,7 @@ export function ExtractionButton({
       }
 
       setPhase("idle");
+      setStage(null);
       router.refresh();
     } catch (caught) {
       if (controller.signal.aborted) return;
@@ -121,7 +138,7 @@ export function ExtractionButton({
       >
         {running && <span className={styles.spinner} aria-hidden="true" />}
         {running
-          ? "Extracting…"
+          ? "Analysing…"
           : hasRequirements
             ? "Re-run extraction"
             : "Extract requirements"}
@@ -129,11 +146,13 @@ export function ExtractionButton({
 
       {running ? (
         <p className={styles.status} role="status">
-          {found === 0
-            ? `Reading ${documentCount} document${documentCount === 1 ? "" : "s"}…`
-            : `${found} requirement${found === 1 ? "" : "s"} written…`}
+          {found > 0
+            ? `${found} requirement${found === 1 ? "" : "s"} written…`
+            : (stage ?? `Reading ${documentCount} document${documentCount === 1 ? "" : "s"}`) + "…"}
           <span className={styles.clock}>{elapsed}s</span>
         </p>
+      ) : summary ? (
+        <p className={styles.summary}>{summary}</p>
       ) : (
         <p className={styles.note}>
           {documentCount === 0

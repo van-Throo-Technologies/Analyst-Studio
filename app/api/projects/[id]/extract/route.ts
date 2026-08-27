@@ -3,20 +3,29 @@ import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "../../../../../lib/prisma";
 import { verifySession } from "../../../../../lib/dal";
 import {
-  extractRequirements,
-  saveExtraction,
+  runPipeline,
+  savePipelineResult,
   ExtractionError,
+  type PipelineStage,
 } from "../../../../../lib/extract";
 
-// Extraction runs for about a minute. A server action can only resolve once, so
-// it cannot say anything while it works; this route streams progress events
-// instead and the button reports them as they arrive.
-export const maxDuration = 300;
+// The pipeline runs several model passes and takes minutes rather than seconds.
+// A server action can only resolve once, so it could not report any of that;
+// this route streams each stage as it starts.
+export const maxDuration = 800;
 
 type Event =
   | { type: "started"; documents: number }
+  | { type: "stage"; stage: PipelineStage; label: string }
   | { type: "progress"; found: number }
-  | { type: "done"; count: number }
+  | {
+      type: "done";
+      count: number;
+      grounded: number;
+      coverageScore: number;
+      gaps: number;
+      repaired: number;
+    }
   | { type: "error"; message: string };
 
 function sse(event: Event) {
@@ -64,18 +73,30 @@ export async function POST(
       try {
         send({ type: "started", documents: project.sourceDocuments.length });
 
-        const extracted = await extractRequirements(
-          project.sourceDocuments,
-          (found) => send({ type: "progress", found }),
-        );
+        const result = await runPipeline(project.sourceDocuments, (event) => {
+          if (event.type === "stage") {
+            send({ type: "stage", stage: event.stage, label: event.label });
+          } else {
+            send({ type: "progress", found: event.found });
+          }
+        });
 
-        if (extracted.length === 0) {
+        if (result.requirements.length === 0) {
           send({ type: "error", message: "No requirements were found in this material." });
         } else {
           // Saved before the done event, so a client that reloads the moment it
           // arrives always sees the requirements it was told about.
-          await saveExtraction(project.id, extracted);
-          send({ type: "done", count: extracted.length });
+          await savePipelineResult(project.id, result);
+
+          const grounded = [...result.grounding.values()].filter((g) => g.isGrounded).length;
+          send({
+            type: "done",
+            count: result.requirements.length,
+            grounded,
+            coverageScore: result.coverageScore,
+            gaps: result.coverageGaps.length + result.domainGaps.length,
+            repaired: result.repaired,
+          });
         }
       } catch (error) {
         // Typed SDK errors, most specific first — a rate limit and a bad key

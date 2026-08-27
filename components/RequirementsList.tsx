@@ -4,6 +4,19 @@ import styles from "./RequirementsList.module.css";
 
 // Multi-value fields are stored newline-joined, so they come back apart the
 // same way. Blank lines are dropped rather than rendered as empty bullets.
+// Evidence is stored as a JSON array of quotes that already passed the literal
+// source match. A malformed value is treated as no evidence rather than thrown —
+// an unreadable field should not take the page down.
+function quotes(value: string | null): string[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.filter((q): q is string => typeof q === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
 function lines(value: string | null) {
   if (!value) return [];
   return value.split("\n").map((line) => line.trim()).filter(Boolean);
@@ -51,6 +64,7 @@ function RequirementCard({
   requirement: RequirementRecord;
   projectId: string;
 }) {
+  const evidence = quotes(requirement.evidence);
   const alternates = lines(requirement.alternateFlows);
   const bdd = lines(requirement.bdDAC);
   const checklist = lines(requirement.checklistAC);
@@ -67,6 +81,18 @@ function RequirementCard({
   return (
     <li className={styles.card}>
       <div className={styles.badges}>
+        {requirement.isGrounded ? (
+          <span className={styles.grounded} title="Every supporting quote was found in the source">
+            Evidence-backed
+          </span>
+        ) : (
+          <span
+            className={styles.inferred}
+            title="No quote from the source could be verified for this requirement — treat it as an inference"
+          >
+            Inferred
+          </span>
+        )}
         <span className={styles.type}>{requirement.type}</span>
         <span className={`${styles.priority} ${priorityClass(requirement.priority)}`}>
           {requirement.priority}
@@ -96,6 +122,17 @@ function RequirementCard({
               <li key={i}>{gate}</li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {evidence.length > 0 && (
+        <div className={styles.evidence}>
+          <h4 className={styles.evidenceLabel}>From the source</h4>
+          {evidence.map((quote, i) => (
+            <blockquote key={i} className={styles.quote}>
+              {quote}
+            </blockquote>
+          ))}
         </div>
       )}
 
