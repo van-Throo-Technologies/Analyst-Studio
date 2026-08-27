@@ -1,4 +1,5 @@
 import type { RequirementRecord } from "../lib/projects";
+import { RequirementEditor } from "./RequirementEditor";
 import styles from "./RequirementsList.module.css";
 
 // Multi-value fields are stored newline-joined, so they come back apart the
@@ -43,7 +44,13 @@ function Bullets({ label, items }: { label: string; items: string[] }) {
   );
 }
 
-function RequirementCard({ requirement }: { requirement: RequirementRecord }) {
+function RequirementCard({
+  requirement,
+  projectId,
+}: {
+  requirement: RequirementRecord;
+  projectId: string;
+}) {
   const alternates = lines(requirement.alternateFlows);
   const bdd = lines(requirement.bdDAC);
   const checklist = lines(requirement.checklistAC);
@@ -64,6 +71,11 @@ function RequirementCard({ requirement }: { requirement: RequirementRecord }) {
         <span className={`${styles.priority} ${priorityClass(requirement.priority)}`}>
           {requirement.priority}
         </span>
+        {requirement.isEdited && (
+          <span className={styles.edited} title="Edited by hand — extraction leaves it alone">
+            Edited
+          </span>
+        )}
         <span className={styles.spacer} />
         <span
           className={`${styles.score} ${scoreClass(requirement.completionScore)}`}
@@ -114,14 +126,18 @@ function RequirementCard({ requirement }: { requirement: RequirementRecord }) {
           </div>
         </details>
       )}
+
+      <RequirementEditor requirement={requirement} projectId={projectId} />
     </li>
   );
 }
 
 export function RequirementsList({
   requirements,
+  projectId,
 }: {
   requirements: RequirementRecord[];
+  projectId: string;
 }) {
   if (requirements.length === 0) {
     return (
@@ -143,7 +159,11 @@ export function RequirementsList({
       </h2>
       <ul className={styles.list}>
         {requirements.map((requirement) => (
-          <RequirementCard key={requirement.id} requirement={requirement} />
+          <RequirementCard
+            key={requirement.id}
+            requirement={requirement}
+            projectId={projectId}
+          />
         ))}
       </ul>
     </section>

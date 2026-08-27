@@ -42,7 +42,7 @@ export function DocumentUploadArea({
       <header className={styles.head}>
         <h2 className={styles.title}>Source material</h2>
         <p className={styles.hint}>
-          Plain-text transcripts and notes — .txt, .md, .vtt, .srt, .csv.
+          Transcripts, notes and specs — PDF, Word (.docx), or plain text.
         </p>
       </header>
 
@@ -87,7 +87,7 @@ export function DocumentUploadArea({
           <input
             type="file"
             name="file"
-            accept=".txt,.md,.vtt,.srt,.csv,.log,text/plain"
+            accept=".pdf,.docx,.txt,.md,.vtt,.srt,.csv,.log,.json,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
             className={styles.fileInput}
             onChange={(event) =>
               setFilename(event.target.files?.[0]?.name ?? null)
@@ -102,7 +102,7 @@ export function DocumentUploadArea({
             </svg>
           </span>
           <span className={styles.dropText}>
-            {filename ?? "Choose a transcript file"}
+            {filename ?? "Choose a file — PDF, Word or text"}
           </span>
         </label>
 

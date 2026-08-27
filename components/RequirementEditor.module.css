@@ -1,0 +1,157 @@
+/* ---------- collapsed control bar ---------- */
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+.edit,
+.delete {
+  padding: var(--space-1) var(--space-2);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.edit {
+  color: var(--color-primary);
+}
+
+.edit:hover {
+  background: var(--color-primary-tint);
+}
+
+.delete {
+  color: var(--color-text-muted);
+}
+
+.delete:hover:not(:disabled) {
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
+}
+
+.delete:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* ---------- expanded form ---------- */
+
+.form {
+  display: grid;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+.field {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+}
+
+.hint {
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: var(--space-3);
+}
+
+.input,
+.select,
+.textarea {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  font: inherit;
+  font-size: 14px;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.textarea {
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.input:focus,
+.select:focus,
+.textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgb(0 82 255 / 0.15);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.save {
+  padding: var(--space-2) var(--space-6);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--color-primary);
+  border: 0;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+}
+
+.save:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}
+
+.save:disabled {
+  background: #cbd5e1;
+  cursor: not-allowed;
+}
+
+.cancel {
+  padding: var(--space-2) var(--space-3);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.warning {
+  flex: 1;
+  min-width: 14rem;
+  font-size: 12px;
+  color: var(--color-text-faint);
+}
+
+.error {
+  font-size: 14px;
+  color: var(--color-danger);
+}

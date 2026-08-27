@@ -35,7 +35,8 @@
 
 .type,
 .priority,
-.score {
+.score,
+.edited {
   display: inline-flex;
   align-items: center;
   padding: var(--space-1) var(--space-2);
@@ -48,6 +49,11 @@
 .type {
   color: var(--color-primary);
   background: var(--color-primary-tint);
+}
+
+.edited {
+  color: #6d28d9;
+  background: #f5f3ff;
 }
 
 .priHigh {

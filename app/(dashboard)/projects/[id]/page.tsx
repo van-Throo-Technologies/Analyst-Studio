@@ -9,12 +9,6 @@ import { RequirementsList } from "../../../../components/RequirementsList";
 import { DeleteProjectButton } from "../../../../components/DeleteProjectButton";
 import styles from "./project.module.css";
 
-// Extraction reads whole transcripts and routinely runs about a minute. Server
-// actions execute in this page's function, so the ceiling has to cover them —
-// Vercel's default is 300s and the platform maximum on Fluid Compute is higher,
-// but 300 is ample for a single extraction pass.
-export const maxDuration = 300;
-
 type Params = { params: Promise<{ id: string }> };
 
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
@@ -31,6 +25,10 @@ export default async function ProjectPage({ params }: Params) {
   // guess at an id is indistinguishable from a real 404.
   const project = await getProject(id);
   if (!project) notFound();
+
+  // Hand-edited requirements survive a re-run, so the button can say how many
+  // will be kept rather than warning that everything is about to be replaced.
+  const editedCount = project.requirements.filter((r) => r.isEdited).length;
 
   return (
     <main className={styles.main}>
@@ -53,6 +51,7 @@ export default async function ProjectPage({ params }: Params) {
           projectId={project.id}
           documentCount={project.sourceDocuments.length}
           hasRequirements={project.requirements.length > 0}
+          editedCount={editedCount}
         />
       </div>
 
@@ -62,7 +61,10 @@ export default async function ProjectPage({ params }: Params) {
           documents={project.sourceDocuments}
         />
 
-        <RequirementsList requirements={project.requirements} />
+        <RequirementsList
+          requirements={project.requirements}
+          projectId={project.id}
+        />
       </div>
 
       <footer className={styles.footer}>

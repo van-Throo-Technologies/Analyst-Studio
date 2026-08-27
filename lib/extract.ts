@@ -4,15 +4,11 @@ import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 
-export const REQUIREMENT_TYPES = [
-  "Functional",
-  "Business",
-  "Non-Functional",
-  "Data",
-  "Integration",
-] as const;
+import { prisma } from "./prisma";
 
-export const PRIORITIES = ["High", "Medium", "Low"] as const;
+import { REQUIREMENT_TYPES, PRIORITIES } from "./constants";
+
+export { REQUIREMENT_TYPES, PRIORITIES };
 
 // Nullable rather than optional: structured outputs require every property to
 // be present, so "unknown" has to be an explicit null instead of a missing key.
@@ -70,8 +66,17 @@ function getClient() {
   return client;
 }
 
+export class ExtractionError extends Error {}
+
+/**
+ * Streams the extraction, reporting how many requirements have been written so
+ * far. Streaming is what makes progress reportable at all — a single blocking
+ * call can only say "still working" — and it also keeps a minute-long response
+ * clear of HTTP timeouts.
+ */
 export async function extractRequirements(
   documents: { filename: string; content: string }[],
+  onProgress?: (found: number) => void,
 ): Promise<ExtractedRequirement[]> {
   if (documents.length === 0) return [];
 
@@ -81,9 +86,9 @@ export async function extractRequirements(
     .map((doc) => `<document filename="${doc.filename}">\n${doc.content}\n</document>`)
     .join("\n\n");
 
-  const response = await getClient().messages.parse({
+  const stream = getClient().messages.stream({
     model: "claude-opus-5",
-    max_tokens: 16000,
+    max_tokens: 32000,
     thinking: { type: "adaptive" },
     system: SYSTEM,
     messages: [
@@ -95,16 +100,74 @@ export async function extractRequirements(
     output_config: { format: zodOutputFormat(ExtractionSchema) },
   });
 
-  // parsed_output is null when the model could not satisfy the schema — for
-  // example if it refused. Treating that as "no requirements" would look like a
-  // successful run that found nothing, so it is surfaced as a failure instead.
-  if (!response.parsed_output) {
-    throw new Error(
-      response.stop_reason === "refusal"
-        ? "The model declined to process this material."
+  if (onProgress) {
+    let reported = 0;
+    let buffer = "";
+
+    // The output is one JSON document arriving in fragments. Each requirement
+    // object opens with its "title" key, so counting those keys counts
+    // completed-enough objects without needing to parse partial JSON.
+    stream.on("text", (delta) => {
+      buffer += delta;
+      const found = (buffer.match(/"title"\s*:/g) ?? []).length;
+      if (found > reported) {
+        reported = found;
+        onProgress(found);
+      }
+    });
+  }
+
+  const message = await stream.finalMessage();
+
+  if (message.stop_reason === "refusal") {
+    throw new ExtractionError("The model declined to process this material.");
+  }
+
+  const text = message.content
+    .filter((block): block is Anthropic.TextBlock => block.type === "text")
+    .map((block) => block.text)
+    .join("");
+
+  let parsed;
+  try {
+    parsed = ExtractionSchema.parse(JSON.parse(text));
+  } catch {
+    throw new ExtractionError(
+      message.stop_reason === "max_tokens"
+        ? "The material produced more requirements than fit in one response. Split it across two projects and try again."
         : "The model returned a response that did not match the expected shape.",
     );
   }
 
-  return response.parsed_output.requirements;
+  return parsed.requirements;
+}
+
+/**
+ * Writes an extraction result over the machine-generated requirements, leaving
+ * hand-edited ones in place. Both statements commit or neither does.
+ */
+export async function saveExtraction(
+  projectId: string,
+  extracted: ExtractedRequirement[],
+) {
+  await prisma.$transaction([
+    prisma.requirement.deleteMany({ where: { projectId, isEdited: false } }),
+    prisma.requirement.createMany({
+      data: extracted.map((r) => ({
+        projectId,
+        title: r.title,
+        description: r.description,
+        type: r.type,
+        priority: r.priority,
+        actor: r.actor,
+        trigger: r.trigger,
+        happyPath: r.happyPath,
+        alternateFlows: r.alternateFlows.join("\n") || null,
+        bdDAC: r.bddAcceptanceCriteria.join("\n") || null,
+        checklistAC: r.checklistAcceptanceCriteria.join("\n") || null,
+        completionScore: r.completionScore,
+        validationGates: r.validationGates.join("\n") || null,
+      })),
+    }),
+  ]);
 }

@@ -1,50 +1,154 @@
 "use client";
 
-import { useActionState } from "react";
-import { runExtraction, type ActionState } from "../lib/actions";
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import styles from "./ExtractionButton.module.css";
+
+type Phase = "idle" | "running" | "error";
 
 export function ExtractionButton({
   projectId,
   documentCount,
   hasRequirements,
+  editedCount,
 }: {
   projectId: string;
   documentCount: number;
   hasRequirements: boolean;
+  editedCount: number;
 }) {
-  const [state, formAction, pending] = useActionState<ActionState, FormData>(
-    runExtraction,
-    {},
-  );
+  const router = useRouter();
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [found, setFound] = useState(0);
+  const [elapsed, setElapsed] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
-  const disabled = pending || documentCount === 0;
+  // A visible clock is the honest signal during the stretch before the first
+  // requirement lands — the model reads everything before it writes anything.
+  useEffect(() => {
+    if (phase !== "running") return;
+    const started = Date.now();
+    const timer = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - started) / 1000));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [phase]);
+
+  // Abort the request if the component goes away mid-run, so the browser is not
+  // left holding a stream nobody reads.
+  useEffect(() => () => abortRef.current?.abort(), []);
+
+  async function run() {
+    setPhase("running");
+    setFound(0);
+    setElapsed(0);
+    setError(null);
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    try {
+      const response = await fetch(`/api/projects/${projectId}/extract`, {
+        method: "POST",
+        signal: controller.signal,
+      });
+
+      if (!response.ok || !response.body) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.error ?? "Extraction could not be started.");
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let failed: string | null = null;
+      let finished = false;
+
+      // Events are newline-delimited but arrive in arbitrary chunks, so the tail
+      // of the buffer is held back until its terminator shows up.
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() ?? "";
+
+        for (const part of parts) {
+          const line = part.trim();
+          if (!line.startsWith("data:")) continue;
+
+          const event = JSON.parse(line.slice(5).trim());
+          if (event.type === "progress") setFound(event.found);
+          else if (event.type === "done") finished = true;
+          else if (event.type === "error") failed = event.message;
+        }
+      }
+
+      if (failed) {
+        setPhase("error");
+        setError(failed);
+        return;
+      }
+
+      if (!finished) {
+        setPhase("error");
+        setError("The connection dropped before extraction finished. Try again.");
+        return;
+      }
+
+      setPhase("idle");
+      router.refresh();
+    } catch (caught) {
+      if (controller.signal.aborted) return;
+      setPhase("error");
+      setError(caught instanceof Error ? caught.message : "Extraction failed.");
+    }
+  }
+
+  const running = phase === "running";
+  const disabled = running || documentCount === 0;
 
   return (
     <div className={styles.wrap}>
-      <form action={formAction}>
-        <input type="hidden" name="projectId" value={projectId} />
-        <button type="submit" className={styles.button} disabled={disabled}>
-          {pending && <span className={styles.spinner} aria-hidden="true" />}
-          {pending
-            ? "Reading the material…"
-            : hasRequirements
-              ? "Re-run extraction"
-              : "Extract requirements"}
-        </button>
-      </form>
-
-      <p className={styles.note}>
-        {documentCount === 0
-          ? "Add source material first."
+      <button
+        type="button"
+        onClick={run}
+        className={styles.button}
+        disabled={disabled}
+        aria-busy={running}
+      >
+        {running && <span className={styles.spinner} aria-hidden="true" />}
+        {running
+          ? "Extracting…"
           : hasRequirements
-            ? "Re-running replaces the requirements below."
-            : "Reads every document in this project."}
-      </p>
+            ? "Re-run extraction"
+            : "Extract requirements"}
+      </button>
 
-      {state.error && (
+      {running ? (
+        <p className={styles.status} role="status">
+          {found === 0
+            ? `Reading ${documentCount} document${documentCount === 1 ? "" : "s"}…`
+            : `${found} requirement${found === 1 ? "" : "s"} written…`}
+          <span className={styles.clock}>{elapsed}s</span>
+        </p>
+      ) : (
+        <p className={styles.note}>
+          {documentCount === 0
+            ? "Add source material first."
+            : editedCount > 0
+              ? `Re-running rewrites the generated requirements. Your ${editedCount} edited one${editedCount === 1 ? " stays" : "s stay"}.`
+              : hasRequirements
+                ? "Re-running replaces the requirements below."
+                : "Reads every document in this project."}
+        </p>
+      )}
+
+      {error && (
         <p className={styles.error} role="alert">
-          {state.error}
+          {error}
         </p>
       )}
     </div>

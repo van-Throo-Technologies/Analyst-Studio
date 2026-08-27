@@ -116,6 +116,11 @@ model Requirement {
   
   completionScore Int      @default(0)
   validationGates String?  @db.Text
+
+  // Set when a person edits the requirement by hand. Re-running extraction
+  // rebuilds the machine-generated set but leaves these alone, so a re-run
+  // never silently discards someone's work.
+  isEdited        Boolean  @default(false)
   
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
