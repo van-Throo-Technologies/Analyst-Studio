@@ -6,7 +6,12 @@ import { redirect } from "next/navigation";
 import { prisma } from "./prisma";
 import { verifySession } from "./dal";
 import { parseUpload, UnsupportedFileError, EmptyDocumentError } from "./documents";
-import { REQUIREMENT_TYPES, PRIORITIES } from "./constants";
+import {
+  REQUIREMENT_TYPES,
+  PRIORITIES,
+  INDUSTRIES,
+  DEFAULT_INDUSTRY,
+} from "./constants";
 
 // Every action re-derives the user from the session and scopes its writes with
 // it. An action is a public HTTP endpoint — the fact that the only link to it
@@ -24,7 +29,17 @@ export async function createProject(
   if (!name) return { error: "Give the project a name." };
   if (name.length > 120) return { error: "That name is too long (120 characters max)." };
 
-  const project = await prisma.project.create({ data: { name, userId } });
+  // The form only ever offers valid options, but a server action is a public
+  // endpoint — anything can post to it. An unrecognised value is rejected
+  // rather than quietly defaulted, so a bad request cannot end up stored as a
+  // plausible-looking project.
+  const submitted = String(formData.get("industry") ?? "").trim();
+  const industry = submitted === "" ? DEFAULT_INDUSTRY : submitted;
+  if (!INDUSTRIES.includes(industry as (typeof INDUSTRIES)[number])) {
+    return { error: `Choose a valid industry. Expected one of: ${INDUSTRIES.join(", ")}.` };
+  }
+
+  const project = await prisma.project.create({ data: { name, industry, userId } });
   redirect(`/projects/${project.id}`);
 }
 

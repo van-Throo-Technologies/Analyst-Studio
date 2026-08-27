@@ -38,6 +38,17 @@
   overflow-wrap: anywhere;
 }
 
+.industry {
+  display: inline-block;
+  margin-bottom: var(--space-2);
+  padding: 2px var(--space-2);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-primary);
+  background: var(--color-primary-tint);
+  border-radius: var(--radius-sm);
+}
+
 .lede {
   color: var(--color-text-muted);
 }

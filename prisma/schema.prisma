@@ -75,6 +75,16 @@ model Project {
   id            String   @id @default(cuid())
   userId        String
   name          String
+
+  // What kind of business this project is for. Set once at creation and not
+  // editable afterwards — extraction, quality rules and compliance checks will
+  // read it, and changing it under requirements already extracted against a
+  // different one would leave the two disagreeing.
+  //
+  // A plain string with a default rather than an enum: adding an industry later
+  // should be a code change, and the default keeps existing rows valid without
+  // a backfill.
+  industry      String   @default("software-saas")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

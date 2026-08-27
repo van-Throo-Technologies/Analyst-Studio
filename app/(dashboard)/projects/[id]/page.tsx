@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { getProject } from "../../../../lib/projects";
+import { INDUSTRY_LABELS } from "../../../../lib/constants";
 import { generateBAPack, generateFAPack } from "../../../../lib/pack-generator";
 import { runAllChecks } from "../../../../lib/quality-checker";
 import { DocumentUploadArea } from "../../../../components/DocumentUploadArea";
@@ -103,6 +104,13 @@ export default async function ProjectPage({ params }: Params) {
       <div className={styles.titleRow}>
         <div className={styles.titleBlock}>
           <h1 className={styles.title}>{project.name}</h1>
+
+          {/* Falls back to the raw slug rather than rendering nothing, so an
+              industry added to the database before its label is still legible. */}
+          <p className={styles.industry}>
+            {INDUSTRY_LABELS[project.industry] ?? project.industry}
+          </p>
+
           <p className={styles.lede}>
             {project.sourceDocuments.length} document
             {project.sourceDocuments.length === 1 ? "" : "s"} · {total} requirement

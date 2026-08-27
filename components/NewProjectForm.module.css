@@ -4,6 +4,11 @@
 }
 
 .form {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.row {
   display: flex;
   gap: var(--space-2);
   flex-wrap: wrap;
@@ -19,8 +24,7 @@
 }
 
 .input {
-  flex: 1;
-  min-width: 12rem;
+  width: 100%;
   padding: var(--space-3);
   font: inherit;
   font-size: 14px;
@@ -38,6 +42,31 @@
   outline: none;
   border-color: var(--color-primary);
   box-shadow: 0 0 0 3px rgb(0 82 255 / 0.15);
+}
+
+.select {
+  flex: 1;
+  min-width: 10rem;
+  padding: var(--space-3);
+  font: inherit;
+  font-size: 14px;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgb(0 82 255 / 0.15);
+}
+
+.hint {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-text-faint);
 }
 
 .button {

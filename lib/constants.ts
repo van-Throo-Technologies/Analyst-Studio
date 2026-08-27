@@ -22,6 +22,30 @@ export const SCOPES = ["in-scope", "out-of-scope"] as const;
 // material (a board-level goal, a field-level validation rule) gets pinned.
 export const PACK_VARIANTS = ["ba", "fa", "both"] as const;
 
+// The industry a project belongs to. Chosen at creation and read later by
+// extraction, quality rules and compliance checks — so the stored value is the
+// stable slug and the label is presentation only. Renaming a label is safe;
+// renaming a slug is a migration.
+export const INDUSTRIES = [
+  "software-saas",
+  "financial-services",
+  "healthcare",
+  "ecommerce",
+  "manufacturing",
+] as const;
+
+export const INDUSTRY_LABELS: Record<string, string> = {
+  "software-saas": "Software / SaaS",
+  "financial-services": "Financial Services",
+  healthcare: "Healthcare",
+  ecommerce: "E-Commerce",
+  manufacturing: "Manufacturing",
+};
+
+export const DEFAULT_INDUSTRY = "software-saas";
+
+export type Industry = (typeof INDUSTRIES)[number];
+
 export type RequirementType = (typeof REQUIREMENT_TYPES)[number];
 export type Priority = (typeof PRIORITIES)[number];
 export type Scope = (typeof SCOPES)[number];
