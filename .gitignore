@@ -15,3 +15,6 @@ node_modules/
 
 # Vercel CLI link + local build artefacts
 .vercel
+
+# TypeScript incremental build cache (tsconfig has "incremental": true)
+*.tsbuildinfo
