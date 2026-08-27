@@ -68,7 +68,9 @@ export async function repairRequirements(
   const parsed = await parseStreamed(RepairSchema, {
     system: REPAIR_SYSTEM,
     content: `Source material:\n\n${material}\n\nCurrent requirements:\n\n${JSON.stringify(requirements, null, 2)}\n\nProblems found:\n\n${problems}`,
-    maxTokens: 32000,
+    // Restates every requirement, so it needs at least as much room as the
+    // extraction that produced them.
+    maxTokens: 64000,
   });
 
   // A failed repair is not a failed extraction — the originals are still good

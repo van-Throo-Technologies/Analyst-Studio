@@ -71,7 +71,10 @@ async function callExtraction(
 ): Promise<ExtractedRequirement[]> {
   const stream = getClient().messages.stream({
     model: "claude-opus-5",
-    max_tokens: 32000,
+    // A multi-document brief can yield 30+ requirements, each carrying a dozen
+    // fields plus quotes. At 32k the reply was truncated mid-JSON and the whole
+    // run was lost. Streaming permits up to 128k; this leaves real headroom.
+    max_tokens: 64000,
     thinking: { type: "adaptive" },
     system: EXTRACTION_SYSTEM,
     messages: [
@@ -100,7 +103,21 @@ async function callExtraction(
     });
   }
 
-  const message = await stream.finalMessage();
+  let message;
+  try {
+    message = await stream.finalMessage();
+  } catch (error) {
+    // With output_config.format the SDK parses before returning, so a truncated
+    // reply surfaces here as a JSON syntax error rather than as stop_reason:
+    // max_tokens. Raw parser output tells the reader nothing they can act on.
+    const detail = error instanceof Error ? error.message : String(error);
+    if (/parse|JSON/i.test(detail)) {
+      throw new ExtractionError(
+        "The response was cut off before it finished — this material produced more requirements than fit in a single reply. Split it across two projects and run each separately.",
+      );
+    }
+    throw error;
+  }
 
   if (message.stop_reason === "refusal") {
     throw new ExtractionError("The model declined to process this material.");
