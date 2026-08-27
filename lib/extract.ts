@@ -189,7 +189,9 @@ export async function runPipeline(
     (await parseStreamed(SubtypeSchema, {
       system: SUBTYPE_SYSTEM,
       content: `Source material:\n\n${material}\n\nFeature titles already extracted:\n\n${titles || "(none)"}`,
-      maxTokens: 32000,
+      // Scales with the feature count, not fixed: 52 features produced ~90k
+      // characters of rules, constraints and use cases and truncated at 32k.
+      maxTokens: 64000,
     })) ?? EMPTY_SUBTYPES;
 
   // --- repair -------------------------------------------------------------

@@ -50,7 +50,18 @@ export async function parseStreamed<T extends z.ZodType>(
 
   if (params.onText) stream.on("text", params.onText);
 
-  const message = await stream.finalMessage();
+  let message;
+  try {
+    message = await stream.finalMessage();
+  } catch (error) {
+    // With output_config.format the SDK parses before returning, so a truncated
+    // reply lands here as a JSON syntax error. Returning null lets the caller
+    // fall back — losing one optional pass, not the whole run behind it.
+    const detail = error instanceof Error ? error.message : String(error);
+    if (/parse|JSON/i.test(detail)) return null;
+    throw error;
+  }
+
   if (message.stop_reason === "refusal") {
     throw new ExtractionError("The model declined to process this material.");
   }
