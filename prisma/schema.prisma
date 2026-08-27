@@ -121,6 +121,25 @@ model Requirement {
   // rebuilds the machine-generated set but leaves these alone, so a re-run
   // never silently discards someone's work.
   isEdited        Boolean  @default(false)
+
+  // --- pack fields -------------------------------------------------------
+  // Which analyst pack a requirement belongs in, and the material each pack
+  // needs. Stored as strings rather than enums so that adding a pack variant
+  // later is a code change rather than a migration.
+  scope           String   @default("in-scope")
+  packVariant     String   @default("both")
+  assumption      String?  @db.Text
+  businessRule    String?  @db.Text
+  precondition    String?  @db.Text
+  dependency      String?  @db.Text
+  validation      String?  @db.Text
+
+  // --- traceability ------------------------------------------------------
+  // JSON array of SourceDocument ids this requirement was drawn from. A JSON
+  // column rather than a join table because it is written once per extraction
+  // and only ever read whole — a relation would add a table and a migration
+  // for no query we actually make.
+  sourceDocumentIds String? @db.Text
   
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

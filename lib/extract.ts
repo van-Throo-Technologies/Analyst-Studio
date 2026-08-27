@@ -6,7 +6,7 @@ import { z } from "zod";
 
 import { prisma } from "./prisma";
 
-import { REQUIREMENT_TYPES, PRIORITIES } from "./constants";
+import { REQUIREMENT_TYPES, PRIORITIES, SCOPES, PACK_VARIANTS } from "./constants";
 
 export { REQUIREMENT_TYPES, PRIORITIES };
 
@@ -25,6 +25,20 @@ const RequirementSchema = z.object({
   checklistAcceptanceCriteria: z.array(z.string()),
   completionScore: z.number().int().min(0).max(100),
   validationGates: z.array(z.string()),
+
+  // Pack fields.
+  scope: z.enum(SCOPES),
+  packVariant: z.enum(PACK_VARIANTS),
+  assumption: z.string().nullable(),
+  businessRule: z.string().nullable(),
+  precondition: z.string().nullable(),
+  validation: z.string().nullable(),
+  dependsOn: z.array(z.string()),
+
+  // Traceability. The model names the files it drew from; the filenames are
+  // resolved to document ids on save, because ids mean nothing to the model
+  // and a hallucinated id would be indistinguishable from a real one.
+  sourceFilenames: z.array(z.string()),
 });
 
 const ExtractionSchema = z.object({
@@ -54,6 +68,18 @@ For each requirement:
 - checklistAcceptanceCriteria: flat, checkable statements — the same criteria in list form for reviewers who prefer it.
 - completionScore: 0-100, how completely the source material specifies this requirement. A passing mention with no detail is 20. A fully specified flow with edge cases and rules is 90. Be honest — a low score is a useful signal about where discovery is thin.
 - validationGates: the open questions a business analyst must resolve before this requirement is ready to build. Empty array only if genuinely nothing is outstanding.
+
+Packaging. The same requirements are published as two packs — a Business Analyst pack framing the problem, and a Functional Analyst pack specifying the solution. Fill these so both read well:
+- scope: "in-scope" normally. "out-of-scope" only when the material explicitly rules something out ("we're not doing X in phase one"). Capturing an exclusion is valuable — it is a decision someone made.
+- packVariant: "both" unless the requirement is genuinely one-sided. "ba" for board-level goals and policy framing a developer does not need; "fa" for field-level mechanics a sponsor does not need. Prefer "both" when unsure.
+- assumption: something the material takes for granted without confirming, if any. Null otherwise. Do not invent — an unexamined assumption is only worth recording when it is really there.
+- businessRule: the policy or constraint behind the requirement, stated as a rule ("Invoices above €10,000 require two approvers"). Null if it is not a rule.
+- precondition: what must already be true before this can start. Null if unstated.
+- validation: the checks, constraints or rules the system must enforce — field rules, limits, permitted values. Null if none are described.
+- dependsOn: titles of other requirements in this same extraction that must exist first. Use the exact titles you gave them. Empty array if independent.
+
+Traceability:
+- sourceFilenames: the filenames of the documents this requirement was drawn from, exactly as given in the document tags. List every file that contributed. Never list a file you were not shown.
 
 Return an empty requirements array if the material contains no requirements at all.`;
 
@@ -150,24 +176,51 @@ export async function saveExtraction(
   projectId: string,
   extracted: ExtractedRequirement[],
 ) {
+  // The model names source files; ids are resolved here against the documents
+  // that actually exist. A filename the project does not have is dropped rather
+  // than stored, so a trace link always points at a real document.
+  const documents = await prisma.sourceDocument.findMany({
+    where: { projectId },
+    select: { id: true, filename: true },
+  });
+  const idByFilename = new Map(documents.map((d) => [d.filename, d.id]));
+
   await prisma.$transaction([
     prisma.requirement.deleteMany({ where: { projectId, isEdited: false } }),
     prisma.requirement.createMany({
-      data: extracted.map((r) => ({
-        projectId,
-        title: r.title,
-        description: r.description,
-        type: r.type,
-        priority: r.priority,
-        actor: r.actor,
-        trigger: r.trigger,
-        happyPath: r.happyPath,
-        alternateFlows: r.alternateFlows.join("\n") || null,
-        bdDAC: r.bddAcceptanceCriteria.join("\n") || null,
-        checklistAC: r.checklistAcceptanceCriteria.join("\n") || null,
-        completionScore: r.completionScore,
-        validationGates: r.validationGates.join("\n") || null,
-      })),
+      data: extracted.map((r) => {
+        const sourceIds = r.sourceFilenames
+          .map((filename) => idByFilename.get(filename))
+          .filter((id): id is string => Boolean(id));
+
+        return {
+          projectId,
+          title: r.title,
+          description: r.description,
+          type: r.type,
+          priority: r.priority,
+          actor: r.actor,
+          trigger: r.trigger,
+          happyPath: r.happyPath,
+          alternateFlows: r.alternateFlows.join("\n") || null,
+          bdDAC: r.bddAcceptanceCriteria.join("\n") || null,
+          checklistAC: r.checklistAcceptanceCriteria.join("\n") || null,
+          completionScore: r.completionScore,
+          validationGates: r.validationGates.join("\n") || null,
+          scope: r.scope,
+          packVariant: r.packVariant,
+          assumption: r.assumption,
+          businessRule: r.businessRule,
+          precondition: r.precondition,
+          validation: r.validation,
+          dependency: r.dependsOn.join("\n") || null,
+          // Every extraction covers the whole document set, so a requirement
+          // with no named source fell back to all of them rather than none.
+          sourceDocumentIds: JSON.stringify(
+            sourceIds.length > 0 ? sourceIds : documents.map((d) => d.id),
+          ),
+        };
+      }),
     }),
   ]);
 }

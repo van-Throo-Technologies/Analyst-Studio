@@ -1,0 +1,200 @@
+.wrap {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.hint {
+  font-size: 14px;
+  color: var(--color-text-muted);
+}
+
+.clear {
+  padding: var(--space-1) var(--space-3);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-primary);
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.clear:hover {
+  border-color: var(--color-primary);
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.column {
+  min-width: 0;
+}
+
+.columnHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+}
+
+.columnCount {
+  padding: 1px var(--space-2);
+  font-size: 11px;
+  color: var(--color-text-muted);
+  background: var(--color-surface-sunken);
+  border-radius: 999px;
+  letter-spacing: 0;
+}
+
+.nodes {
+  display: grid;
+  gap: var(--space-2);
+  align-content: start;
+  max-height: 30rem;
+  overflow-y: auto;
+  padding-right: var(--space-1);
+}
+
+/* ---------- nodes ---------- */
+
+.node {
+  display: grid;
+  gap: var(--space-1);
+  width: 100%;
+  padding: var(--space-3);
+  font: inherit;
+  text-align: left;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: opacity 0.12s ease, border-color 0.12s ease;
+}
+
+.node:hover {
+  border-color: var(--color-primary);
+}
+
+.nodeOn {
+  border-color: var(--color-primary);
+  background: var(--color-primary-tint);
+}
+
+.nodeDim {
+  opacity: 0.35;
+}
+
+.nodeTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+.nodeMeta {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.bar {
+  display: block;
+  height: 4px;
+  margin: var(--space-1) 0;
+  background: var(--color-border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.barFill {
+  display: block;
+  height: 100%;
+  background: var(--color-primary);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+}
+
+.chip,
+.chipMuted {
+  padding: 1px var(--space-2);
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  overflow-wrap: anywhere;
+}
+
+.chip {
+  color: var(--color-primary);
+  background: var(--color-primary-tint);
+}
+
+.chipMuted {
+  color: var(--color-text-faint);
+  background: var(--color-surface-sunken);
+}
+
+/* ---------- criteria column ---------- */
+
+.criteriaGroup {
+  padding: var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.criteriaFor {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: var(--space-2);
+}
+
+.criteria {
+  display: grid;
+  gap: var(--space-1);
+  padding-left: 1rem;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--color-text-muted);
+}
+
+.empty {
+  padding: var(--space-3);
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--color-text-muted);
+  background: var(--color-surface-sunken);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+@media (max-width: 900px) {
+  .columns {
+    grid-template-columns: 1fr;
+  }
+
+  .nodes {
+    max-height: none;
+  }
+}

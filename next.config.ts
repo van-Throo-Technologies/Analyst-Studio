@@ -1,9 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Both parsers ship prebuilt bundles with dynamic requires that the bundler
-  // cannot follow; loading them from node_modules at runtime avoids that.
-  serverExternalPackages: ["unpdf", "mammoth"],
+  // These ship prebuilt bundles with dynamic requires the bundler cannot
+  // follow — pdfkit also reads its standard-font metrics from disk. Loading
+  // them from node_modules at runtime avoids both problems.
+  serverExternalPackages: ["unpdf", "mammoth", "pdfkit"],
 
   experimental: {
     serverActions: {
