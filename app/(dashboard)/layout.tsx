@@ -20,10 +20,8 @@ export default async function DashboardLayout({
       <header className={styles.header}>
         <div className={styles.headerLeft}>
           <Link href="/projects" className={styles.brandLink}>
-            <Logo muted />
+            <Logo />
           </Link>
-          <span className={styles.divider} aria-hidden="true" />
-          <span className={styles.appName}>Analyst Studio</span>
         </div>
 
         <div className={styles.account}>

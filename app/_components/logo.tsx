@@ -1,6 +1,6 @@
 import styles from "./logo.module.css";
 
-// The VanThroo mark: a white lemniscate on a blue rounded square. Drawn inline
+// The product mark: a white lemniscate on a blue rounded square. Drawn inline
 // rather than loaded from /public so it inherits currentColor and never causes
 // a second request or a flash before the brand renders.
 //
@@ -25,15 +25,15 @@ export function LogoMark({ className }: { className?: string }) {
   );
 }
 
-// The mark plus the wordmark. `muted` renders the wordmark at the smaller,
-// lighter weight used in the app header, where the page title carries the
-// emphasis instead.
+// The mark plus the wordmark. `muted` renders it at the smaller, lighter weight
+// used as secondary chrome — on the legal pages, where the document title
+// carries the emphasis instead.
 export function Logo({ muted = false }: { muted?: boolean }) {
   return (
     <span className={styles.lockup}>
       <LogoMark />
       <span className={muted ? styles.wordmarkMuted : styles.wordmark}>
-        VanThroo Technologies
+        Analyst Studio
       </span>
     </span>
   );
