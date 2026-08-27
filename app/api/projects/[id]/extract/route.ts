@@ -12,7 +12,12 @@ import {
 // The pipeline runs several model passes and takes minutes rather than seconds.
 // A server action can only resolve once, so it could not report any of that;
 // this route streams each stage as it starts.
-export const maxDuration = 800;
+//
+// 300s is the ceiling available on every plan — higher needs Pro with Fluid
+// Compute. A measured single-document run takes about 190s, so there is
+// headroom but not unlimited headroom: a very large document set can still hit
+// this, and the stream will end without a done event.
+export const maxDuration = 300;
 
 type Event =
   | { type: "started"; documents: number }
