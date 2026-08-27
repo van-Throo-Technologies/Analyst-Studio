@@ -12,3 +12,6 @@ node_modules/
 
 # generated Prisma client, if the generator is pointed at a repo path
 /lib/generated/prisma
+
+# Vercel CLI link + local build artefacts
+.vercel

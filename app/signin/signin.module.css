@@ -1,60 +1,280 @@
-.main {
+.page {
   min-height: 100vh;
   display: grid;
-  place-items: center;
-  padding: 2rem;
+  grid-template-columns: 1fr 1fr;
+  background: #fff;
 }
 
-.card {
+/* ---------- left: the form ---------- */
+
+.formSide {
+  display: grid;
+  place-items: center;
+  padding: 3rem 2rem;
+}
+
+.formInner {
   width: 100%;
-  max-width: 22rem;
+  max-width: 24rem;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 1.75rem;
+}
+
+.logoMark {
+  width: 32px;
+  height: 32px;
+  color: #2563eb;
+  flex: none;
+}
+
+.brandName {
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #0f172a;
 }
 
 .title {
-  font-size: 1.5rem;
-  margin-bottom: 0.5rem;
+  font-size: 2rem;
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+  color: #0f172a;
+  margin-bottom: 0.6rem;
 }
 
-.blurb {
-  color: #555;
+.subtitle {
+  color: #64748b;
+  line-height: 1.55;
+  margin-bottom: 2rem;
+}
+
+.label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 0.45rem;
+}
+
+.inputWrap {
+  position: relative;
   margin-bottom: 1.5rem;
-  line-height: 1.5;
 }
 
-.form {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
+.inputIcon {
+  position: absolute;
+  left: 0.85rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  color: #94a3b8;
+  pointer-events: none;
 }
 
 .input {
-  padding: 0.65rem 0.75rem;
-  border: 1px solid #ccc;
-  border-radius: 6px;
-  font-size: 1rem;
+  width: 100%;
+  padding: 0.8rem 0.9rem 0.8rem 2.6rem;
+  font-size: 0.95rem;
+  color: #0f172a;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.input::placeholder {
+  color: #94a3b8;
 }
 
 .input:focus {
-  outline: 2px solid #000;
-  outline-offset: 1px;
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgb(37 99 235 / 0.15);
 }
 
 .button {
-  padding: 0.65rem 0.75rem;
-  border: 0;
-  border-radius: 6px;
-  background: #000;
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.85rem 1rem;
+  font-size: 0.95rem;
+  font-weight: 600;
   color: #fff;
-  font-size: 1rem;
+  background: #2563eb;
+  border: 0;
+  border-radius: 10px;
   cursor: pointer;
 }
 
+.button:hover {
+  background: #1d4ed8;
+}
+
+.button:focus-visible {
+  outline: 2px solid #1e3a8a;
+  outline-offset: 2px;
+}
+
+.arrow {
+  font-size: 1.05em;
+  line-height: 1;
+}
+
+.note {
+  margin-top: 1.25rem;
+  text-align: center;
+  font-size: 0.85rem;
+  color: #94a3b8;
+}
+
 .error {
-  margin-bottom: 1rem;
-  padding: 0.65rem 0.75rem;
-  border: 1px solid #e0b4b4;
-  border-radius: 6px;
-  background: #fdf3f3;
-  color: #7a2b2b;
-  font-size: 0.9rem;
+  margin-bottom: 1.25rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+/* ---------- right: the product panel ---------- */
+
+.panel {
+  position: relative;
+  overflow: hidden;
+  margin: 0.75rem 0.75rem 0.75rem 0;
+  border-radius: 16px;
+  background:
+    radial-gradient(120% 90% at 70% 0%, #2f6bff 0%, #1d4ed8 42%, #16307d 100%);
+  color: #fff;
+}
+
+/* faint dot grid, matching the reference */
+.panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgb(255 255 255 / 0.16) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+.panelInner {
+  position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2.5rem;
+  padding: 3rem;
+}
+
+.card {
+  align-self: center;
+  width: 100%;
+  max-width: 24rem;
+  padding: 1.25rem;
+  border-radius: 14px;
+  background: rgb(255 255 255 / 0.13);
+  border: 1px solid rgb(255 255 255 / 0.18);
+  backdrop-filter: blur(6px);
+}
+
+.cardHead {
+  display: flex;
+  gap: 0.8rem;
+  margin-bottom: 1.1rem;
+}
+
+.cardIcon {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: #fff;
+}
+
+.cardEyebrow {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 0.75);
+  margin-bottom: 0.3rem;
+}
+
+.cardBody {
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: rgb(255 255 255 / 0.95);
+}
+
+.rows {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.dot {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 0.6rem;
+  color: #1d4ed8;
+  background: rgb(255 255 255 / 0.3);
+}
+
+.dotDone {
+  background: #4ade80;
+  color: #14532d;
+}
+
+.bar {
+  height: 9px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.28);
+}
+
+.panelTitle {
+  font-size: clamp(1.9rem, 3.2vw, 2.9rem);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+  font-weight: 800;
+}
+
+.panelBlurb {
+  max-width: 30rem;
+  line-height: 1.6;
+  color: rgb(255 255 255 / 0.85);
+}
+
+/* ---------- responsive: the panel is decorative, so it goes first ---------- */
+
+@media (max-width: 900px) {
+  .page {
+    grid-template-columns: 1fr;
+  }
+
+  .panel {
+    display: none;
+  }
 }
