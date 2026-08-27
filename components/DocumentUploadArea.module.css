@@ -1,0 +1,188 @@
+.card {
+  padding: var(--space-6);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.head {
+  margin-bottom: var(--space-4);
+}
+
+.title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin-bottom: var(--space-1);
+}
+
+.hint {
+  font-size: 14px;
+  color: var(--color-text-muted);
+}
+
+/* ---------- existing documents ---------- */
+
+.list {
+  list-style: none;
+  display: grid;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.docIcon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  color: var(--color-primary);
+}
+
+.docName {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.docDate {
+  flex: none;
+  font-size: 13px;
+  color: var(--color-text-faint);
+}
+
+.remove {
+  padding: var(--space-1) var(--space-2);
+  font: inherit;
+  font-size: 13px;
+  color: var(--color-text-muted);
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.remove:hover {
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
+}
+
+/* ---------- upload ---------- */
+
+.form {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-6);
+  color: var(--color-text-muted);
+  background: var(--color-surface-sunken);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.drop:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+/* Visually hidden but still focusable, so the label stays the click target
+   while keyboard users can still reach the input. */
+.fileInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.drop:focus-within {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.dropIcon {
+  color: var(--color-primary);
+}
+
+.dropText {
+  font-size: 14px;
+  font-weight: 500;
+  text-align: center;
+  word-break: break-all;
+}
+
+.or {
+  text-align: center;
+  font-size: 13px;
+  color: var(--color-text-faint);
+}
+
+.textarea {
+  width: 100%;
+  padding: var(--space-3);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  resize: vertical;
+}
+
+.textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgb(0 82 255 / 0.15);
+}
+
+.submit {
+  justify-self: start;
+  padding: var(--space-3) var(--space-6);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--color-primary);
+  border: 0;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+}
+
+.submit:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}
+
+.submit:disabled {
+  background: #cbd5e1;
+  cursor: not-allowed;
+}
+
+.error {
+  padding: var(--space-3);
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-border);
+  border-radius: var(--radius-md);
+}

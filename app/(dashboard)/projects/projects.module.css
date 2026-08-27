@@ -1,0 +1,80 @@
+.main {
+  max-width: 64rem;
+  margin: 0 auto;
+  padding: 40px var(--space-6) 64px;
+}
+
+.titleRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-6);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-8);
+}
+
+.title {
+  font-size: 1.9rem;
+  letter-spacing: -0.03em;
+  color: var(--color-text);
+  margin-bottom: var(--space-1);
+}
+
+.lede {
+  color: var(--color-text-muted);
+}
+
+.action {
+  min-width: 20rem;
+  flex: 1;
+  max-width: 26rem;
+}
+
+.list {
+  list-style: none;
+  display: grid;
+  gap: var(--space-3);
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 64px var(--space-6);
+  background: var(--color-surface);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-panel);
+}
+
+.emptyGlyph {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  margin-bottom: var(--space-4);
+  border-radius: var(--radius-lg);
+  color: var(--color-primary);
+  background: var(--color-primary-tint);
+}
+
+.emptyTitle {
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin-bottom: var(--space-2);
+}
+
+.emptyBody {
+  max-width: 30rem;
+  line-height: 1.6;
+  color: var(--color-text-muted);
+}
+
+@media (max-width: 720px) {
+  .action {
+    min-width: 0;
+    max-width: none;
+    width: 100%;
+  }
+}
