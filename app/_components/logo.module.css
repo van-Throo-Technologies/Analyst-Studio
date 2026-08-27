@@ -1,0 +1,26 @@
+.lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.mark {
+  width: 32px;
+  height: 32px;
+  color: var(--color-primary);
+  flex: none;
+}
+
+.wordmark {
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--color-text);
+}
+
+.wordmarkMuted {
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--color-text-muted);
+}

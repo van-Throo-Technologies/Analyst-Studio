@@ -1,11 +1,92 @@
+/* ---------------------------------------------------------------------------
+   Analyst Studio design system
+
+   Tokens extracted from the VanThroo mockup. The product is committed to a
+   single light palette — the reference design has one look — so these are
+   defined once rather than swapped under prefers-color-scheme.
+   --------------------------------------------------------------------------- */
+
+:root {
+  /* colour */
+  --color-primary: #0052ff;
+  --color-primary-hover: #0036cc;
+  --color-primary-tint: #eef3ff;
+
+  --color-text: #1e293b;
+  --color-text-muted: #64748b;
+  --color-text-faint: #94a3b8;
+
+  --color-surface: #ffffff;
+  --color-surface-sunken: #f8fafc;
+  --color-border: #e2e8f0;
+
+  --color-success: #10b981;
+
+  --color-danger: #b91c1c;
+  --color-danger-border: #fecaca;
+  --color-danger-bg: #fef2f2;
+
+  /* the hero gradient, dark blue into primary */
+  --gradient-hero: radial-gradient(
+    120% 90% at 70% 0%,
+    #1a63ff 0%,
+    var(--color-primary) 38%,
+    #0036cc 100%
+  );
+
+  /* radius */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  /* the hero panel and empty-state cards carry a larger radius than the
+     control scale above, matching the mockup's rounded hero. */
+  --radius-panel: 16px;
+
+  /* spacing — multiples of 4/8 */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+}
+
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  background: #fff;
-  color: #000;
+  font-family: var(--font-sans), system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, sans-serif;
+  font-size: 16px;
+  line-height: 1.55;
+  background: var(--color-surface);
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+a {
+  color: var(--color-primary);
+}
+
+/* Every interactive element gets the same visible focus ring, so keyboard
+   users are never left guessing where they are. */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
 }

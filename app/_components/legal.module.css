@@ -1,0 +1,46 @@
+.page {
+  min-height: 100vh;
+  background: var(--color-surface);
+}
+
+.header {
+  padding: var(--space-3) var(--space-6);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.brandLink {
+  text-decoration: none;
+}
+
+.main {
+  max-width: 42rem;
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-6) 5rem;
+}
+
+.title {
+  font-size: 2rem;
+  margin-bottom: var(--space-4);
+}
+
+.body {
+  color: var(--color-text-muted);
+  line-height: 1.7;
+}
+
+.body p + p {
+  margin-top: var(--space-4);
+}
+
+.back {
+  display: inline-block;
+  margin-top: var(--space-8);
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+.back:hover {
+  text-decoration: underline;
+}
