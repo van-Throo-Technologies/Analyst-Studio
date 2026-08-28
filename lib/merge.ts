@@ -33,7 +33,7 @@ export function similarity(a: string, b: string): number {
   return (2 * shared) / (first.size + second.size);
 }
 
-type Mergeable = {
+export type Mergeable = {
   title: string;
   description: string;
   evidence: string[];
@@ -53,7 +53,7 @@ type Mergeable = {
  */
 export function mergeDuplicates<T extends Mergeable>(
   records: T[],
-  score: (record: T) => number,
+  score: (record: Mergeable) => number,
   threshold = 0.72,
 ): { merged: T[]; collapsed: number } {
   const kept: T[] = [];
@@ -89,32 +89,33 @@ export function mergeDuplicates<T extends Mergeable>(
   return { merged: kept, collapsed };
 }
 
+// Both scorers read fields defensively rather than by exact shape. A record
+// arriving from the model may leave a nullable field undefined rather than
+// null, and a scorer is not the place to be strict about that.
+const count = (value: unknown) => (Array.isArray(value) ? value.length : 0);
+const filled = (value: unknown) => (value ? 1 : 0);
+
+// Scorers read optional fields off a Mergeable, so they index through an
+// unknown-valued view rather than asserting a shape the caller may not have.
+const view = (r: Mergeable) => r as Mergeable & Record<string, unknown>;
+
 /** How much a feature record actually says — used to pick the survivor. */
-export function featureRichness(r: {
-  description: string;
-  bddAcceptanceCriteria: string[];
-  checklistAcceptanceCriteria: string[];
-  validationGates: string[];
-  alternateFlows: string[];
-  evidence: string[];
-  happyPath: string | null;
-  actor: string | null;
-  completionScore: number;
-}): number {
+export function featureRichness(record: Mergeable): number {
+  const r = view(record);
   return (
     r.description.length / 100 +
-    r.bddAcceptanceCriteria.length * 2 +
-    r.checklistAcceptanceCriteria.length * 2 +
-    r.validationGates.length +
-    r.alternateFlows.length +
-    r.evidence.length +
-    (r.happyPath ? 3 : 0) +
-    (r.actor ? 1 : 0) +
-    r.completionScore / 20
+    count(r.bddAcceptanceCriteria) * 2 +
+    count(r.checklistAcceptanceCriteria) * 2 +
+    count(r.validationGates) +
+    count(r.alternateFlows) +
+    count(r.evidence) +
+    filled(r.happyPath) * 3 +
+    filled(r.actor) +
+    (typeof r.completionScore === "number" ? r.completionScore / 20 : 0)
   );
 }
 
 /** How much a child record says. Children are short, so this stays simple. */
-export function childRichness(r: { description: string; evidence: string[] }): number {
-  return r.description.length / 100 + r.evidence.length;
+export function childRichness(record: Mergeable): number {
+  return record.description.length / 100 + count(view(record).evidence);
 }

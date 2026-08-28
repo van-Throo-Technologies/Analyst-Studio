@@ -18,7 +18,8 @@ import {
 } from "./extract-core";
 import { verifyEvidence } from "./grounding";
 import { runAllChecks, type CheckableRequirement } from "./quality-checker";
-import { repairRequirements, findCoverageGaps, findDomainGaps } from "./review";
+import { repairRequirements, findCoverageGaps, findDomainGaps, coverageScore } from "./review";
+import { mergeDuplicates, featureRichness, childRichness } from "./merge";
 
 export { REQUIREMENT_TYPES, PRIORITIES, ExtractionError };
 export type { ExtractedRequirement };
@@ -44,10 +45,39 @@ export type PipelineEvent =
 
 type Document = { id?: string; filename: string; content: string };
 
+function tagDocument(doc: Document) {
+  return `<document filename="${doc.filename}">\n${doc.content}\n</document>`;
+}
+
 function buildMaterial(documents: Document[]) {
-  return documents
-    .map((doc) => `<document filename="${doc.filename}">\n${doc.content}\n</document>`)
-    .join("\n\n");
+  return documents.map(tagDocument).join("\n\n");
+}
+
+/**
+ * Runs tasks with a ceiling on how many are in flight.
+ *
+ * Chunking turns one call into a dozen, and firing all of them at once is how a
+ * rate limit turns a working pipeline into a failing one. Four at a time keeps
+ * the wall-clock win without the risk.
+ */
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  task: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (true) {
+      const index = next++;
+      if (index >= items.length) return;
+      results[index] = await task(items[index], index);
+    }
+  });
+
+  await Promise.all(workers);
+  return results;
 }
 
 // Quality checks read the persisted shape; extraction produces the model shape.
@@ -163,6 +193,9 @@ export type PipelineResult = {
   domain: string;
   domainGaps: Awaited<ReturnType<typeof findDomainGaps>>["gaps"];
   repaired: number;
+  // How many duplicates the merge collapsed across documents. Reported so a
+  // merge that is too aggressive shows up as a number rather than as silence.
+  featuresCollapsed: number;
 };
 
 export async function runPipeline(
@@ -172,46 +205,104 @@ export async function runPipeline(
   const emit = (event: PipelineEvent) => onEvent?.(event);
   const material = buildMaterial(documents);
 
-  emit({ type: "stage", stage: "extract", label: "Reading the material" });
-  let requirements = await callExtraction(material, (found) =>
-    emit({ type: "progress", found }),
+  // --- extract, one document at a time ------------------------------------
+  // A single call over the whole set truncated repeatedly and took half an
+  // hour. Per-document calls are each a fraction of the size, they run
+  // concurrently, and one document failing no longer costs the others.
+  emit({
+    type: "stage",
+    stage: "extract",
+    label: `Reading ${documents.length} document${documents.length === 1 ? "" : "s"}`,
+  });
+
+  // Progress is reported across all documents at once, so the count has to be
+  // summed rather than overwritten by whichever chunk reported last.
+  const foundPerDocument = new Array(documents.length).fill(0);
+  const reportProgress = (index: number, found: number) => {
+    foundPerDocument[index] = found;
+    emit({ type: "progress", found: foundPerDocument.reduce((a, b) => a + b, 0) });
+  };
+
+  const perDocument = await mapWithConcurrency(documents, 4, (doc, index) =>
+    callExtraction(tagDocument(doc), (found) => reportProgress(index, found)),
   );
 
-  // --- subtypes -----------------------------------------------------------
-  // A second call, given the feature titles just produced so that every child
-  // links to a title that really exists. Repair, grounding and the audit passes
-  // below operate on features only: the child kinds are short quoted statements
-  // with far less room to be vague, and running them through a pass that
-  // restates everything would multiply the slowest stage for little gain.
+  const { merged: mergedFeatures, collapsed: featuresCollapsed } = mergeDuplicates(
+    perDocument.flat(),
+    featureRichness,
+  );
+  let requirements = mergedFeatures;
+
+  // --- subtypes, also per document ----------------------------------------
+  // Each call is handed the MERGED feature titles, so a child links to a title
+  // that survived the merge rather than to one that was collapsed away.
   emit({ type: "stage", stage: "subtypes", label: "Separating rules, constraints and use cases" });
   const titles = requirements.map((r) => `- ${r.title}`).join("\n");
-  const extras =
-    (await parseStreamed(SubtypeSchema, {
-      system: SUBTYPE_SYSTEM,
-      content: `Source material:\n\n${material}\n\nFeature titles already extracted:\n\n${titles || "(none)"}`,
-      // Scales with the feature count, not fixed: 52 features produced ~90k
-      // characters of rules, constraints and use cases and truncated at 32k.
-      maxTokens: 64000,
-    })) ?? EMPTY_SUBTYPES;
 
-  // --- repair -------------------------------------------------------------
+  const subtypeChunks = await mapWithConcurrency(documents, 4, (doc) =>
+    parseStreamed(SubtypeSchema, {
+      system: SUBTYPE_SYSTEM,
+      content: `Source material:\n\n${tagDocument(doc)}\n\nFeature titles already extracted:\n\n${titles || "(none)"}`,
+      maxTokens: 32000,
+    }),
+  );
+
+  const collectedSubtypes = subtypeChunks.reduce<Subtypes>(
+    (acc, chunk) => {
+      if (!chunk) return acc;
+      acc.businessRules.push(...chunk.businessRules);
+      acc.regulatoryConstraints.push(...chunk.regulatoryConstraints);
+      acc.useCases.push(...chunk.useCases);
+      return acc;
+    },
+    { businessRules: [], regulatoryConstraints: [], useCases: [] },
+  );
+
+  const extras: Subtypes = {
+    businessRules: mergeDuplicates(collectedSubtypes.businessRules, childRichness).merged,
+    regulatoryConstraints: mergeDuplicates(collectedSubtypes.regulatoryConstraints, childRichness).merged,
+    useCases: mergeDuplicates(collectedSubtypes.useCases, childRichness).merged,
+  };
+
+  // --- repair --------------------------------------------------------------
   // The deterministic checks run here, before anything is written, so they act
   // as a gate rather than a report. Vagueness the source can settle is fixed;
   // vagueness the source cannot settle becomes an open question in the output.
+  //
+  // Batched, because a repair pass restates every requirement it is given: one
+  // call over sixty features was the slowest stage in the pipeline and came
+  // close to truncating. Each batch still sees the whole source, so a
+  // requirement is repaired against everything that was said about it.
   emit({ type: "stage", stage: "repair", label: "Resolving ambiguity against the source" });
   const issues = runAllChecks(toCheckable(requirements)).issues;
   let repaired = 0;
+
   if (issues.length > 0) {
-    const revised = await repairRequirements(requirements, material, issues);
-    // A repair pass that comes back with a different requirement count has done
-    // something other than repair, so the original set is kept.
-    if (revised.length === requirements.length) {
+    const BATCH = 12;
+    const batches: ExtractedRequirement[][] = [];
+    for (let i = 0; i < requirements.length; i += BATCH) {
+      batches.push(requirements.slice(i, i + BATCH));
+    }
+
+    const repairedBatches = await mapWithConcurrency(batches, 3, async (batch) => {
+      const titlesInBatch = new Set(batch.map((r) => r.title));
+      const batchIssues = issues.filter((issue) => titlesInBatch.has(issue.requirementTitle));
+      if (batchIssues.length === 0) return batch;
+
+      const revised = await repairRequirements(batch, material, batchIssues);
+      // A batch that comes back a different size has done something other than
+      // repair, so the original is kept.
+      return revised.length === batch.length ? revised : batch;
+    });
+
+    const flattened = repairedBatches.flat();
+    if (flattened.length === requirements.length) {
       repaired = issues.length;
-      requirements = revised;
+      requirements = flattened;
     }
   }
 
-  // --- grounding ----------------------------------------------------------
+  // --- grounding -----------------------------------------------------------
   // Run after repair, because repair rewrites requirements and may move their
   // quotes. Purely deterministic: string matching, no model involved.
   emit({ type: "stage", stage: "ground", label: "Checking every quote against the source" });
@@ -221,11 +312,20 @@ export async function runPipeline(
     grounding.set(index, { verified: result.verified, isGrounded: result.isGrounded });
   });
 
-  // --- coverage -----------------------------------------------------------
+  // --- coverage, per document ---------------------------------------------
+  // Naturally chunked: the question "what did this document say that no
+  // requirement covers" is asked of one document at a time. Counts are summed
+  // before scoring, so a long document is not weighted the same as a short one.
   emit({ type: "stage", stage: "coverage", label: "Looking for what was missed" });
-  const coverage = await findCoverageGaps(requirements, material);
+  const coverageChunks = await mapWithConcurrency(documents, 4, (doc) =>
+    findCoverageGaps(requirements, tagDocument(doc)),
+  );
+  const coverageGaps = coverageChunks.flatMap((chunk) => chunk.gaps);
+  const coverageTotal = coverageChunks.reduce((sum, chunk) => sum + chunk.total, 0);
 
-  // --- domain expectations ------------------------------------------------
+  // --- domain expectations -------------------------------------------------
+  // Not chunked: the question is what the requirement set as a whole fails to
+  // address, which cannot be answered a document at a time.
   emit({ type: "stage", stage: "expectations", label: "Checking against what this kind of system needs" });
   const domain = await findDomainGaps(requirements);
 
@@ -236,11 +336,12 @@ export async function runPipeline(
     extras,
     material,
     grounding,
-    coverageScore: coverage.score,
-    coverageGaps: coverage.gaps,
+    coverageScore: coverageScore(coverageTotal, coverageGaps.length),
+    coverageGaps,
     domain: domain.domain,
     domainGaps: domain.gaps,
     repaired,
+    featuresCollapsed,
   };
 }
 

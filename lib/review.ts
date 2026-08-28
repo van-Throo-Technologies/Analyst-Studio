@@ -118,7 +118,11 @@ Also report totalRequirementBearingPoints: your honest count of ALL requirement-
 
 export type CoverageGap = z.infer<typeof CoverageSchema>["gaps"][number];
 
-export type CoverageResult = { score: number; gaps: CoverageGap[] };
+// Raw counts rather than a score: chunked runs audit each document separately
+// and the figures have to be summed before a percentage means anything.
+// Averaging three per-document percentages would weight a one-line note the
+// same as a 4,000-word PRD.
+export type CoverageResult = { total: number; gaps: CoverageGap[] };
 
 export async function findCoverageGaps(
   requirements: ExtractedRequirement[],
@@ -141,16 +145,22 @@ export async function findCoverageGaps(
   });
 
   const parsed = response.parsed_output;
-  if (!parsed) return { score: 100, gaps: [] };
+  if (!parsed) return { total: 0, gaps: [] };
 
   // A gap the model cannot quote is not evidence of a gap. Dropping the
   // unverifiable ones is what stops this pass inventing work.
   const gaps = parsed.gaps.filter((gap) => isQuoteInSource(gap.quote, material));
 
-  const total = Math.max(parsed.totalRequirementBearingPoints, requirements.length + gaps.length);
-  const score = total === 0 ? 100 : Math.round(((total - gaps.length) / total) * 100);
+  return {
+    total: Math.max(parsed.totalRequirementBearingPoints, gaps.length),
+    gaps,
+  };
+}
 
-  return { score: Math.max(0, Math.min(100, score)), gaps };
+/** Turns summed counts into the percentage shown to the reader. */
+export function coverageScore(total: number, gapCount: number): number {
+  if (total === 0) return 100;
+  return Math.max(0, Math.min(100, Math.round(((total - gapCount) / total) * 100)));
 }
 
 // ------------------------------------------------------- domain expectations
