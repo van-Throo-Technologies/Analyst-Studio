@@ -16,7 +16,7 @@ datasource db {
 // RAG Database: Store 626 extracted requirements for zero-cost queries
 model RuleBase {
   id                    String   @id @default(cuid())
-  recordType            String   // "business-rule" | "regulatory-constraint" | "use-case" | "acceptance-criteria"
+  recordType            String   // "feature" | "business-rule" | "regulatory-constraint" | "use-case" | "acceptance-criteria"
   title                 String
   description           String
   quote                 String?  // Original source quote for grounding

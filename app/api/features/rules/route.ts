@@ -14,14 +14,17 @@ import { INDUSTRIES } from "@/lib/constants";
  *   industry   omit to search every industry
  *   tag        rules carrying this tag, e.g. CDD, Sanctions
  *   framework  rules citing this regulation, e.g. AML5, FATF
- *   recordType business-rule | regulatory-constraint | use-case |
+ *   recordType feature | business-rule | regulatory-constraint | use-case |
  *              acceptance-criteria
  *   search     substring of the title, description or source quote
  *   grounded   "true" to return only rules whose quote was verified
  *   limit      1-500, default 100
  */
 
+// Includes "feature": the RuleBase model's comment lists only the child kinds,
+// but features are seeded into the corpus too and must be retrievable.
 const RECORD_TYPES = [
+  "feature",
   "business-rule",
   "regulatory-constraint",
   "use-case",
