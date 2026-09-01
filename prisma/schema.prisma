@@ -13,6 +13,32 @@ datasource db {
   // not valid" even though they are.
   url      = env("DATABASE_URL")
 }
+// RAG Database: Store 626 extracted requirements for zero-cost queries
+model RuleBase {
+  id                    String   @id @default(cuid())
+  recordType            String   // "business-rule" | "regulatory-constraint" | "use-case" | "acceptance-criteria"
+  title                 String
+  description           String
+  quote                 String?  // Original source quote for grounding
+  sourceDocument        String?  // Which document this came from
+  tags                  String[] // e.g., ["CDD", "sanctions", "screening"]
+  regulatoryFrameworks  String[] // e.g., ["FATF", "AML5", "PSD2"]
+  industry              String   // e.g., "financial-services"
+  parentRuleId          String?  // For linking child rules to parent
+  parentRule            RuleBase? @relation("RuleHierarchy", fields: [parentRuleId], references: [id], onDelete: SetNull)
+  childRules            RuleBase[] @relation("RuleHierarchy")
+  confidence            Float?   // 0-1 grounding confidence
+  isGrounded            Boolean  @default(false)
+  isPinned              Boolean  @default(false)
+  version               Int      @default(1)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([industry])
+  @@index([recordType])
+  @@index([tags])
+  @@index([regulatoryFrameworks])
+}
 
 model User {
   id            String    @id @default(cuid())
