@@ -87,8 +87,6 @@ async function seedRuleBase() {
   }
   console.log(`Found ${requirements.length} requirements`);
 
-  const byId = new Map(requirements.map((r) => [r.id, r]));
-
   // Tags are computed for parents first so children can inherit them.
   const tagsFor = new Map<string, string[]>();
   const frameworksFor = new Map<string, string[]>();
