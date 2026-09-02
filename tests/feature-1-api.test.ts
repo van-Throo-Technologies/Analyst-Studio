@@ -20,7 +20,6 @@ for (const file of [".env", ".env.local"]) {
 }
 
 const BASE_URL = process.env.TEST_BASE_URL ?? "http://localhost:3000";
-const INDUSTRY = "financial-services";
 
 const prisma = new PrismaClient();
 
@@ -33,10 +32,14 @@ type TestCase = {
   expectedRuleTypes?: string[];
   /** Expect a 400 with this text in the message. */
   expectedError?: string;
+  /** Every returned rule must belong to one of these industries. */
+  expectedIndustries?: string[];
+  /** The result must span at least this many distinct industries. */
+  minIndustriesSpanned?: number;
 };
 
 const tests: TestCase[] = [
-  { name: "Tag filter: CDD", query: { tag: "CDD" }, expectedMinCount: 180 },
+  { name: "Tag filter: CDD", query: { tag: "CDD" }, expectedMinCount: 180, expectedIndustries: ["financial-services"] },
   { name: "Framework filter: AML5", query: { framework: "AML5" }, expectedMinCount: 10 },
   {
     name: "Type filter: use-case",
@@ -53,7 +56,7 @@ const tests: TestCase[] = [
   },
   { name: "Composition: framework=FATF & tag=KYC", query: { framework: "FATF", tag: "KYC" }, expectedMinCount: 1 },
   { name: "Composition: tag=PEP & recordType=use-case", query: { tag: "PEP", recordType: "use-case" }, expectedMinCount: 1 },
-  { name: "Grounded rules only", query: { grounded: "true" }, expectedMinCount: 500 },
+  { name: "Grounded rules only", query: { grounded: "true" }, expectedMinCount: 1100 },
 
   // A filter that is valid but matches nothing must be an empty result, not an
   // error — "nothing matched" and "you typed it wrong" are different answers.
@@ -66,12 +69,61 @@ const tests: TestCase[] = [
 
   // % is a SQL LIKE wildcard; it must be treated as a literal character.
   { name: "Search treats % literally", query: { search: "%" }, expectedMinCount: 0 },
+
+  // --- multi-industry ----------------------------------------------------
+  // A shared tag has to reach every industry, or the cross-industry question
+  // "how do we handle this concern anywhere" silently returns part of the answer.
+  {
+    name: "Shared tag Privacy spans all industries",
+    query: { tag: "Privacy" },
+    minIndustriesSpanned: 3,
+  },
+  { name: "Shared tag Retention spans all industries", query: { tag: "Retention" }, minIndustriesSpanned: 3 },
+  { name: "Shared tag Risk spans all industries", query: { tag: "Risk" }, minIndustriesSpanned: 3 },
+
+  // Isolation: an industry filter must return that industry and nothing else.
+  {
+    name: "Isolation: healthcare only",
+    query: { industry: "healthcare" },
+    expectedMinCount: 250,
+    expectedIndustries: ["healthcare"],
+  },
+  {
+    name: "Isolation: software-saas only",
+    query: { industry: "software-saas" },
+    expectedMinCount: 300,
+    expectedIndustries: ["software-saas"],
+  },
+  {
+    name: "Isolation holds with a shared tag",
+    query: { tag: "Privacy", industry: "healthcare" },
+    expectedMinCount: 1,
+    expectedIndustries: ["healthcare"],
+  },
+
+  // Industry-specific tags must not appear outside their industry.
+  { name: "PHI is healthcare only", query: { tag: "PHI" }, expectedMinCount: 1, expectedIndustries: ["healthcare"] },
+  {
+    name: "TenantIsolation is SaaS only",
+    query: { tag: "TenantIsolation" },
+    expectedMinCount: 1,
+    expectedIndustries: ["software-saas"],
+  },
+  {
+    name: "HIPAA-Security is healthcare only",
+    query: { framework: "HIPAA-Security" },
+    expectedMinCount: 1,
+    expectedIndustries: ["healthcare"],
+  },
+  { name: "SOC2 is SaaS only", query: { framework: "SOC2" }, expectedMinCount: 1, expectedIndustries: ["software-saas"] },
+
+  // GDPR genuinely applies to all three, so it must not be isolated.
+  { name: "GDPR spans industries", query: { framework: "GDPR" }, minIndustriesSpanned: 2 },
 ];
 
 async function main() {
   console.log("Feature 1 Rules Engine API tests\n");
   console.log(`  base url: ${BASE_URL}`);
-  console.log(`  industry: ${INDUSTRY}\n`);
 
   // The endpoint is session-guarded, so the test needs a real session. Without
   // one every request redirects to sign-in and every assertion fails for a
@@ -88,7 +140,13 @@ async function main() {
 
   try {
     for (const test of tests) {
-      const params = new URLSearchParams({ industry: INDUSTRY, ...test.query });
+      // No default industry: the corpus is multi-industry, and defaulting one in
+      // would hide exactly the cross-industry behaviour these cases check.
+      const params = new URLSearchParams(test.query);
+      // A high limit so industry-spanning assertions see the whole result, but
+      // only where the case has not set one itself — the rejection case sends a
+      // deliberately invalid limit and overwriting it tested nothing.
+      if (!("limit" in test.query)) params.set("limit", "500");
       const url = `${BASE_URL}/api/features/rules?${params.toString()}`;
 
       let body: any;
@@ -142,6 +200,25 @@ async function main() {
         continue;
       }
 
+      const industries = [...new Set(body.data.rules.map((r: any) => r.industry))];
+
+      if (test.expectedIndustries) {
+        const leaked = industries.filter((i) => !test.expectedIndustries!.includes(i as string));
+        if (leaked.length > 0) {
+          failures.push(`${test.name}: leaked into ${leaked.join(", ")}`);
+          console.log(`  FAIL  ${test.name} — leaked into ${leaked.join(", ")}`);
+          continue;
+        }
+      }
+
+      if (test.minIndustriesSpanned && industries.length < test.minIndustriesSpanned) {
+        failures.push(
+          `${test.name}: spans ${industries.length} industries (${industries.join(", ")}), expected ${test.minIndustriesSpanned}`,
+        );
+        console.log(`  FAIL  ${test.name} — spans only ${industries.join(", ")}`);
+        continue;
+      }
+
       if (test.expectedRuleTypes) {
         const wrong = body.data.rules.filter(
           (r: any) => !test.expectedRuleTypes!.includes(r.recordType),
@@ -153,11 +230,8 @@ async function main() {
         }
       }
 
-      const sample = body.data.rules[0];
-      const detail = sample
-        ? `e.g. "${sample.title.slice(0, 52)}"${sample.quote ? " (quoted)" : ""}`
-        : "no matches";
-      console.log(`  ok    ${test.name} — total=${total}, returned=${returned}, ${detail}`);
+      const detail = industries.length > 0 ? industries.join(", ") : "no matches";
+      console.log(`  ok    ${test.name} — total=${total}, returned=${returned}, [${detail}]`);
       passed++;
     }
   } finally {

@@ -1,16 +1,21 @@
 /**
- * Extract requirements from the KYC source documents.
+ * Extract requirements from a folder of source documents.
  *
- * Reads the three documents from source_document, splits them on their own
- * headings, extracts requirements per section, verifies every quote against
- * the source, and writes extracted-requirements.json for review and seeding.
+ * Splits each document on its own headings, extracts requirements per section,
+ * verifies every quote against the source, and writes a JSON file for review
+ * and seeding.
  *
- * Usage: npx tsx scripts/extract-from-kyc-docs.ts
- *        npx tsx scripts/extract-from-kyc-docs.ts --dry-run
+ * Usage:
+ *   npx tsx scripts/extract-documents.ts --dir mock-data/healthcare-hipaa --industry healthcare
+ *   npx tsx scripts/extract-documents.ts --dir <folder> --industry <id> --out <file>
+ *   npx tsx scripts/extract-documents.ts --dir <folder> --industry <id> --dry-run
+ *
+ * The tag and framework vocabulary comes from lib/taxonomy.ts for the industry
+ * given, so one script serves every industry rather than a copy per industry
+ * drifting apart.
  *
  * This costs real API credit. It writes a file and never touches the database.
- * --dry-run shows how the documents will be split and calls nothing, so the
- * chunking can be checked before spending anything.
+ * --dry-run shows how the documents will be split and calls nothing.
  */
 
 import { PrismaClient } from "@prisma/client";
@@ -33,6 +38,8 @@ for (const file of [".env", ".env.local"]) {
 }
 
 import { isQuoteInSource } from "../lib/grounding";
+import { INDUSTRIES } from "../lib/constants";
+import { tagsFor, frameworksFor } from "../lib/taxonomy";
 
 const prisma = new PrismaClient();
 const anthropic = new Anthropic();
@@ -86,12 +93,13 @@ type Extracted = z.infer<typeof RequirementSchema> & {
   quoteVerified: boolean;
 };
 
-const SYSTEM = `You are a senior business analyst extracting structured requirements from KYC and AML compliance material.
+function buildSystem(industry: string): string {
+  return `You are a senior business analyst extracting structured requirements from ${industry.replace(/-/g, " ")} compliance and product material.
 
 Extract every distinct requirement in the section you are given, as one of five kinds:
 
 - feature: something the system must do, or a quality it must have.
-- business-rule: a policy, threshold or decision rule, stated so it can be tested. "Invoices over €10,000 require two approvers." Every distinct threshold or band is its own rule — a scoring table with three bands is three rules.
+- business-rule: a policy, threshold or decision rule, stated so it can be tested. "Records are retained for six years." Every distinct threshold or band is its own rule — a table with three tiers is three rules.
 - regulatory-constraint: an obligation imposed from outside by law, regulation or a standards body. Name the framework in regulatoryFrameworks only where the source names it.
 - use-case: a named actor going through a journey end to end. Requires an actor.
 - acceptance-criteria: a single checkable statement of what "done" means.
@@ -103,10 +111,13 @@ Rules:
 
 The quote is checked against the source by literal string match after you return it. A quote that does not appear exactly is discarded and the requirement is marked unverified — so copy, do not paraphrase.
 
-Available tags: CDD, Sanctions, PEP, KYC, AML, Beneficial, Enhanced, Reporting, Monitoring, Escalation, Risk, Screening, Privacy, Retention, Transactions, Documents, Performance.
-Available frameworks: FATF, AML5, PSD2, MiFID, Wolfsberg, EU-AI-Act, GDPR, OFAC.
+Available tags: ${tagsFor(industry).join(", ")}.
+Available frameworks: ${frameworksFor(industry).join(", ")}.
+
+Use the tags exactly as written. Several of them — Privacy, Retention, Monitoring, Audit, Encryption, AccessControl, Consent, IncidentResponse, VendorManagement, Risk, Reporting, Escalation, Performance, Documents — mean the same thing in every industry, and are how someone finds every rule about a concern across the whole business. Apply them whenever they fit, not only when the section uses that word.
 
 Return an empty array if the section contains no requirements.`;
+}
 
 /**
  * Splits markdown on its own headings.
@@ -197,6 +208,7 @@ async function extractFromSection(
   section: string,
   index: number,
   total: number,
+  system: string,
 ): Promise<z.infer<typeof RequirementSchema>[]> {
   const heading = section.split("\n")[0].replace(/^#+\s*/, "").slice(0, 58) || "(untitled)";
   console.log(`  [${index + 1}/${total}] ${heading}`);
@@ -208,7 +220,7 @@ async function extractFromSection(
     // markdown-fence guessing entirely.
     max_tokens: 16000,
     thinking: { type: "adaptive" },
-    system: SYSTEM,
+    system,
     messages: [
       {
         role: "user",
@@ -229,28 +241,48 @@ async function extractFromSection(
   return response.parsed_output.requirements;
 }
 
+function flag(name: string): string | null {
+  const i = process.argv.indexOf(`--${name}`);
+  return i !== -1 ? process.argv[i + 1] ?? null : null;
+}
+
 async function main() {
   const dryRun = process.argv.includes("--dry-run");
-  console.log(dryRun ? "KYC document extraction — DRY RUN, no API calls\n" : "KYC document extraction\n");
+  const dir = flag("dir");
+  const industry = flag("industry");
+  const outputFile = flag("out") ?? "extracted-requirements.json";
 
-  const docs = await prisma.sourceDocument.findMany({
-    where: {
-      filename: {
-        in: [
-          "1-regulatory-requirements.md",
-          "2-technical-requirements.md",
-          "3-business-scenario.md",
-        ],
-      },
-    },
-    orderBy: { filename: "asc" },
-  });
-
-  if (docs.length !== 3) {
-    throw new Error(
-      `Expected 3 documents, found ${docs.length}. Restore them first — they are in mock-data/financial-services-kyc/.`,
-    );
+  if (!dir) throw new Error("--dir is required, e.g. --dir mock-data/healthcare-hipaa");
+  if (!industry) throw new Error("--industry is required, e.g. --industry healthcare");
+  if (!INDUSTRIES.includes(industry as (typeof INDUSTRIES)[number])) {
+    throw new Error(`Unknown industry "${industry}". Expected one of: ${INDUSTRIES.join(", ")}.`);
   }
+  if (!fs.existsSync(dir)) throw new Error(`No such folder: ${dir}`);
+
+  console.log(
+    dryRun
+      ? `Document extraction — DRY RUN, no API calls\n`
+      : `Document extraction\n`,
+  );
+  console.log(`  folder:   ${dir}`);
+  console.log(`  industry: ${industry}`);
+  console.log(`  tags:     ${tagsFor(industry).length} available\n`);
+
+  // Read from disk rather than the database. The documents are the input; they
+  // do not need to be loaded into a project before they can be extracted, and
+  // requiring that made the script usable for exactly one folder.
+  const docs = fs
+    .readdirSync(dir)
+    .filter((f) => f.endsWith(".md") && f.toLowerCase() !== "readme.md")
+    .sort()
+    .map((filename) => ({
+      filename,
+      content: fs.readFileSync(`${dir}/${filename}`, "utf8"),
+    }));
+
+  if (docs.length === 0) throw new Error(`No .md documents found in ${dir}`);
+
+  const system = buildSystem(industry);
 
   const started = Date.now();
   const all: Extracted[] = [];
@@ -276,7 +308,7 @@ async function main() {
     console.log(`${doc.filename} — ${sections.length} sections`);
 
     const perSection = await mapWithConcurrency(sections, CONCURRENCY, (section, i) =>
-      extractFromSection(doc.filename, section, i, sections.length),
+      extractFromSection(doc.filename, section, i, sections.length, system),
     );
 
     // Grounding is verified here, against the document the quote claims to come
@@ -306,13 +338,14 @@ async function main() {
   console.log(`  tags             ${tags.join(", ") || "none"}`);
   console.log(`  elapsed          ${Math.round((Date.now() - started) / 1000)}s`);
 
-  const outputFile = "extracted-requirements.json";
   fs.writeFileSync(
     outputFile,
     JSON.stringify(
       {
         extractedAt: new Date().toISOString(),
         model: MODEL,
+        industry,
+        sourceFolder: dir,
         totalRecords: all.length,
         quotesVerified: verified,
         byType,

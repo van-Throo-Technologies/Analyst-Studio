@@ -112,6 +112,10 @@ export async function GET(request: NextRequest) {
         select: {
           id: true,
           recordType: true,
+          // Returned since the corpus went multi-industry: without it a caller
+          // filtering across industries cannot tell which one a rule came from,
+          // and a shared tag like Privacy returns an undifferentiated list.
+          industry: true,
           title: true,
           description: true,
           quote: true,

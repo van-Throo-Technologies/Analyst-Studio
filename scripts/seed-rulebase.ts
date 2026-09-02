@@ -183,7 +183,22 @@ async function seedRuleBase() {
     frameworksFor.set(r.id, [...new Set([...(frameworksFor.get(r.id) ?? []), ...parentFrameworks])]);
   }
 
-  await prisma.ruleBase.deleteMany({});
+  // Scoped to the industries being seeded. An unconditional delete here would
+  // have wiped every other industry's rules the first time a second industry
+  // was added — the whole corpus destroyed by a command that looked like it was
+  // only touching one project.
+  //
+  // Industry is the available granularity: RuleBase records which industry a
+  // rule belongs to, not which project produced it. Two projects in the same
+  // industry therefore re-seed each other, which is why the count is reported
+  // below rather than assumed.
+  const industriesSeeded = [...new Set(requirements.map((r) => r.project.industry))];
+  const cleared = await prisma.ruleBase.deleteMany({
+    where: { industry: { in: industriesSeeded } },
+  });
+  console.log(
+    `Cleared ${cleared.count} existing rule(s) for: ${industriesSeeded.join(", ")}`,
+  );
 
   // Inserted one at a time so the id map is known before children reference it.
   const ruleIdByRequirementId = new Map<string, string>();
