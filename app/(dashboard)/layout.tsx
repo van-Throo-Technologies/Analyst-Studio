@@ -22,6 +22,14 @@ export default async function DashboardLayout({
           <Link href="/projects" className={styles.brandLink}>
             <Logo />
           </Link>
+          <nav className={styles.nav}>
+            <Link href="/projects" className={styles.navLink}>
+              Projects
+            </Link>
+            <Link href="/rules" className={styles.navLink}>
+              Rule base
+            </Link>
+          </nav>
         </div>
 
         <div className={styles.account}>
