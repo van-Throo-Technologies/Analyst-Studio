@@ -4,6 +4,8 @@
  * Usage:
  *   npx tsx scripts/import-extraction.ts                 # dry run, changes nothing
  *   npx tsx scripts/import-extraction.ts --write         # into a NEW project
+ *   npx tsx scripts/import-extraction.ts --write --industry healthcare
+ *   npx tsx scripts/import-extraction.ts --write --input other.json --name "..." 
  *   npx tsx scripts/import-extraction.ts --write --replace-project "<name>"
  *
  * Defaults to a dry run, and to creating a new project rather than touching an
@@ -13,6 +15,8 @@
 
 import { PrismaClient } from "@prisma/client";
 import fs from "node:fs";
+
+import { INDUSTRIES } from "../lib/constants";
 
 for (const file of [".env", ".env.local"]) {
   if (!fs.existsSync(file)) continue;
@@ -24,8 +28,14 @@ for (const file of [".env", ".env.local"]) {
 
 const prisma = new PrismaClient();
 
-const INPUT = "extracted-requirements.json";
-const PROJECT_NAME = "KYC Extraction (526 records)";
+const DEFAULT_INPUT = "extracted-requirements.json";
+const DEFAULT_PROJECT_NAME = "KYC Extraction (526 records)";
+const DEFAULT_INDUSTRY = "financial-services";
+
+function flag(name: string): string | null {
+  const i = process.argv.indexOf(`--${name}`);
+  return i !== -1 ? process.argv[i + 1] ?? null : null;
+}
 
 type Incoming = {
   title: string;
@@ -87,11 +97,17 @@ function toRow(r: Incoming, projectId: string, documentIds: Record<string, strin
 
 async function main() {
   const write = process.argv.includes("--write");
-  const replaceIndex = process.argv.indexOf("--replace-project");
-  const replaceName = replaceIndex !== -1 ? process.argv[replaceIndex + 1] : null;
+  const replaceName = flag("replace-project");
+  const INPUT = flag("input") ?? DEFAULT_INPUT;
+  const projectName = flag("name") ?? DEFAULT_PROJECT_NAME;
+  const industry = flag("industry") ?? DEFAULT_INDUSTRY;
+
+  if (!INDUSTRIES.includes(industry as (typeof INDUSTRIES)[number])) {
+    throw new Error(`Unknown industry "${industry}". Expected one of: ${INDUSTRIES.join(", ")}.`);
+  }
 
   if (!fs.existsSync(INPUT)) {
-    throw new Error(`${INPUT} not found — run scripts/extract-from-kyc-docs.ts first.`);
+    throw new Error(`${INPUT} not found — run the extraction first.`);
   }
   const payload = JSON.parse(fs.readFileSync(INPUT, "utf8"));
   const records: Incoming[] = payload.requirements;
@@ -108,7 +124,7 @@ async function main() {
   if (!write) {
     console.log("DRY RUN — nothing written. Re-run with --write to import.");
     if (replaceName) console.log(`Would replace the requirements in project "${replaceName}".`);
-    else console.log(`Would create a new project "${PROJECT_NAME}" and leave existing projects alone.`);
+    else console.log(`Would create a new project "${projectName}" (industry: ${industry}) and leave existing projects alone.`);
     return;
   }
 
@@ -124,9 +140,9 @@ async function main() {
     await prisma.requirement.deleteMany({ where: { projectId: project.id } });
   } else {
     project = await prisma.project.create({
-      data: { name: PROJECT_NAME, industry: "financial-services", userId: owner.id },
+      data: { name: projectName, industry, userId: owner.id },
     });
-    console.log(`Created project "${project.name}"`);
+    console.log(`Created project "${project.name}" (industry: ${industry})`);
   }
 
   // Source documents, so trace links point at something real.

@@ -109,6 +109,7 @@ async function seedRuleBase() {
   const requirements = await prisma.requirement.findMany({
     where: projectId ? { projectId } : {},
     orderBy: { createdAt: "asc" },
+    include: { project: { select: { industry: true } } },
   });
 
   // Provenance. sourceDocumentIds records which document a requirement came
@@ -204,7 +205,11 @@ async function seedRuleBase() {
         sourceDocument: sourceOf(r.sourceDocumentIds),
         tags: tagsFor.get(r.id) ?? [],
         regulatoryFrameworks: frameworksFor.get(r.id) ?? [],
-        industry: "financial-services",
+        // Taken from the project the requirement belongs to. Hardcoding it
+        // filed every rule under financial services, so seeding a healthcare
+        // project would have put its rules in the wrong corpus and made the
+        // ?industry= filter return the wrong answer with no sign of it.
+        industry: r.project.industry,
         parentRuleId: r.parentRequirementId
           ? ruleIdByRequirementId.get(r.parentRequirementId) ?? null
           : null,
@@ -230,6 +235,7 @@ async function seedRuleBase() {
   console.log("By record type:");
   byType.forEach((t) => console.log(`  ${t.recordType.padEnd(24)} ${t._count.id}`));
   const unknownSource = await prisma.ruleBase.count({ where: { sourceDocument: "unknown" } });
+  const industries = await prisma.ruleBase.groupBy({ by: ["industry"], _count: { id: true } });
 
   console.log("\nRetrieval quality:");
   console.log(`  grounded            ${grounded}/${total}`);
@@ -237,6 +243,8 @@ async function seedRuleBase() {
   console.log(`  linked to a parent  ${linked}/${total}`);
   console.log(`  UNTAGGED            ${untagged}/${total}`);
   console.log(`  source unknown      ${unknownSource}/${total}`);
+  console.log("\nBy industry:");
+  industries.forEach((i) => console.log(`  ${i.industry.padEnd(24)} ${i._count.id}`));
 }
 
 seedRuleBase()
