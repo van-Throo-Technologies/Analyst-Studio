@@ -76,6 +76,12 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  // Prisma's `contains` passes the term straight into LIKE, so % and _ act as
+  // wildcards: searching for "2%" matched anything containing a 2. Escaping
+  // them makes the search mean what it says. Backslash is Postgres's default
+  // LIKE escape character.
+  const literal = (term: string) => term.replace(/[\\%_]/g, (c) => `\\${c}`);
+
   try {
     // Filters compose rather than override each other: asking for CDD rules
     // under AML5 should narrow to their intersection, not silently drop one of
@@ -89,9 +95,9 @@ export async function GET(request: NextRequest) {
       ...(grounded === "true" && { isGrounded: true }),
       ...(search && {
         OR: [
-          { title: { contains: search, mode: "insensitive" as const } },
-          { description: { contains: search, mode: "insensitive" as const } },
-          { quote: { contains: search, mode: "insensitive" as const } },
+          { title: { contains: literal(search), mode: "insensitive" as const } },
+          { description: { contains: literal(search), mode: "insensitive" as const } },
+          { quote: { contains: literal(search), mode: "insensitive" as const } },
         ],
       }),
     };

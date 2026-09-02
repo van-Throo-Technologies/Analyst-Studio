@@ -111,6 +111,31 @@ async function seedRuleBase() {
     orderBy: { createdAt: "asc" },
   });
 
+  // Provenance. sourceDocumentIds records which document a requirement came
+  // from; the earlier version wrote the constant "kyc-extraction" over all of
+  // it, so a retrieved rule could not say whether it came from the regulatory
+  // brief, the technical PRD or the business scenario. In a grounded corpus
+  // that is half of what grounding is for.
+  const documents = await prisma.sourceDocument.findMany({
+    where: projectId ? { projectId } : {},
+    select: { id: true, filename: true },
+  });
+  const filenameById = new Map(documents.map((d) => [d.id, d.filename]));
+
+  const sourceOf = (raw: string | null): string => {
+    if (!raw) return "unknown";
+    try {
+      const ids = JSON.parse(raw);
+      if (!Array.isArray(ids)) return "unknown";
+      const names = ids
+        .map((id: unknown) => (typeof id === "string" ? filenameById.get(id) : undefined))
+        .filter((n): n is string => Boolean(n));
+      return names.length > 0 ? names.join(", ") : "unknown";
+    } catch {
+      return "unknown";
+    }
+  };
+
   if (requirements.length === 0) {
     console.log("No requirements found — nothing to seed.");
     return;
@@ -176,7 +201,7 @@ async function seedRuleBase() {
         description: r.description,
         // The verified source quote — the thing that grounds a retrieved rule.
         quote: quotes[0] ?? null,
-        sourceDocument: "kyc-extraction",
+        sourceDocument: sourceOf(r.sourceDocumentIds),
         tags: tagsFor.get(r.id) ?? [],
         regulatoryFrameworks: frameworksFor.get(r.id) ?? [],
         industry: "financial-services",
@@ -204,11 +229,14 @@ async function seedRuleBase() {
   console.log(`\nSeeded ${total} rules\n`);
   console.log("By record type:");
   byType.forEach((t) => console.log(`  ${t.recordType.padEnd(24)} ${t._count.id}`));
+  const unknownSource = await prisma.ruleBase.count({ where: { sourceDocument: "unknown" } });
+
   console.log("\nRetrieval quality:");
   console.log(`  grounded            ${grounded}/${total}`);
   console.log(`  with source quote   ${quoted}/${total}`);
   console.log(`  linked to a parent  ${linked}/${total}`);
   console.log(`  UNTAGGED            ${untagged}/${total}`);
+  console.log(`  source unknown      ${unknownSource}/${total}`);
 }
 
 seedRuleBase()
