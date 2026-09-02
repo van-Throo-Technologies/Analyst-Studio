@@ -42,10 +42,11 @@ type Incoming = {
   happyPath: string | null;
 };
 
-// The extraction speaks in tags and frameworks; the Requirement table has
-// neither. Both survive into RuleBase, which is where retrieval happens — but
-// the framework is also written to `validation`, the field the pack generator
-// and the seed already read a constraint's framework from.
+// Tags and frameworks are carried through as they were extracted. The model
+// assigned 1,464 tags across these records; dropping them and re-deriving from
+// keywords recovered barely half and left 80 records unreachable by tag search.
+// The first framework is also mirrored into `validation`, which is where the
+// pack generator and the seed already look for a constraint's framework.
 function toRow(r: Incoming, projectId: string, documentIds: Record<string, string>) {
   const docId = documentIds[r.sourceDocument];
   return {
@@ -72,6 +73,8 @@ function toRow(r: Incoming, projectId: string, documentIds: Record<string, strin
       ? r.description
       : null,
     validation: r.regulatoryFrameworks[0] ?? null,
+    tags: r.tags,
+    regulatoryFrameworks: r.regulatoryFrameworks,
     completionScore: 0,
     scope: "in-scope",
     packVariant: "both",

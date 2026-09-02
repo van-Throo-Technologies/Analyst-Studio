@@ -23,6 +23,10 @@
  *     The quote is what grounds a retrieved rule; filling it with criteria made
  *     isGrounded mean "has criteria", which is not grounding at all.
  *
+ *   - tags assigned at extraction are used as they are, and keyword matching
+ *     only fills in where none were assigned. Re-deriving over the top of them
+ *     threw away half of what the model had labelled.
+ *
  *   - children inherit their parent's tags. An acceptance criterion about
  *     customer due diligence has to be findable under CDD, and on its own its
  *     one line rarely contains the keyword. Untagged rows are unreachable by
@@ -119,16 +123,26 @@ async function seedRuleBase() {
 
   for (const r of requirements) {
     const quotes = quotesFrom(r.evidence);
-    const ownTags = matchAll(DOMAIN_KEYWORDS, r.title, r.description, r.businessRule);
-    const ownFrameworks = matchAll(
-      FRAMEWORK_KEYWORDS,
-      r.title,
-      r.description,
-      r.businessRule,
-      // The framework a constraint names is stored in validation.
-      r.validation,
-      quotes.join(" "),
-    );
+
+    // Tags assigned during extraction win. The model read the section and chose
+    // them; keyword matching is the fallback for records that arrived without
+    // any, not a second opinion to overwrite the first.
+    const ownTags = r.tags.length
+      ? r.tags
+      : matchAll(DOMAIN_KEYWORDS, r.title, r.description, r.businessRule);
+
+    const ownFrameworks = r.regulatoryFrameworks.length
+      ? r.regulatoryFrameworks
+      : matchAll(
+          FRAMEWORK_KEYWORDS,
+          r.title,
+          r.description,
+          r.businessRule,
+          // The framework a constraint names is stored in validation.
+          r.validation,
+          quotes.join(" "),
+        );
+
     tagsFor.set(r.id, ownTags);
     frameworksFor.set(r.id, ownFrameworks);
   }

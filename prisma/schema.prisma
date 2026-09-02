@@ -224,6 +224,14 @@ model Requirement {
   // for no query we actually make.
   sourceDocumentIds String? @db.Text
 
+  // --- retrieval ---------------------------------------------------------
+  // Assigned by extraction and carried through to RuleBase, which is where
+  // retrieval filters on them. Without these the import dropped them and the
+  // seed fell back to keyword matching, which recovered barely half the tags
+  // the model had assigned and left 80 records unreachable by tag search.
+  tags                 String[]
+  regulatoryFrameworks String[]
+
   // --- grounding ---------------------------------------------------------
   // JSON array of verbatim quotes from the source that support this
   // requirement. isGrounded is set only when every quote was found in the
