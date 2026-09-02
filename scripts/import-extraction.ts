@@ -146,12 +146,21 @@ async function main() {
   }
 
   // Source documents, so trace links point at something real.
+  //
+  // Filenames come from the extraction itself, not a hardcoded list. Hardcoding
+  // them meant a renamed document produced no source row, and every record from
+  // it lost its provenance — 210 rules reporting "source unknown" while the
+  // file sat right there in the folder.
+  const dir: string = payload.sourceFolder ?? "mock-data/financial-services-kyc";
+  const filenames = [...new Set(records.map((r) => r.sourceDocument))].filter(
+    (f) => fs.existsSync(`${dir}/${f}`),
+  );
+  if (filenames.length === 0) {
+    throw new Error(`None of the extraction's source documents were found in ${dir}`);
+  }
+
   const documentIds: Record<string, string> = {};
-  for (const filename of [
-    "1-regulatory-requirements.md",
-    "2-technical-requirements.md",
-    "3-business-scenario.md",
-  ]) {
+  for (const filename of filenames) {
     const existing = await prisma.sourceDocument.findFirst({
       where: { projectId: project.id, filename },
     });
@@ -163,7 +172,7 @@ async function main() {
             projectId: project.id,
             filename,
             mimeType: "text/markdown",
-            content: fs.readFileSync(`mock-data/financial-services-kyc/${filename}`, "utf8"),
+            content: fs.readFileSync(`${dir}/${filename}`, "utf8"),
           },
         })
       ).id;
