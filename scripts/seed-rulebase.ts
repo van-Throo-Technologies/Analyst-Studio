@@ -1,6 +1,14 @@
 /**
  * Seeds RuleBase — the retrieval corpus the rules engine queries.
  *
+ * Usage:
+ *   npx tsx scripts/seed-rulebase.ts                      # every project
+ *   npx tsx scripts/seed-rulebase.ts --project "<name>"   # just that one
+ *
+ * Scope matters once more than one project exists: seeding unscoped mixes two
+ * extractions into one corpus, and a retrieval cannot then tell you which run a
+ * rule came from.
+ *
  * This is a RAG database, so it is judged on whether a search finds the right
  * rule, not on how many rows it has. Three things follow from that, and all
  * three were wrong in the first version of this script:
@@ -75,9 +83,27 @@ function quotesFrom(evidence: string | null): string[] {
 }
 
 async function seedRuleBase() {
-  console.log("Seeding RuleBase…");
+  const nameIndex = process.argv.indexOf("--project");
+  const projectName = nameIndex !== -1 ? process.argv[nameIndex + 1] : null;
+
+  let projectId: string | null = null;
+  if (projectName) {
+    const project = await prisma.project.findFirst({ where: { name: projectName } });
+    if (!project) throw new Error(`No project named "${projectName}".`);
+    projectId = project.id;
+    console.log(`Seeding RuleBase from "${projectName}"…`);
+  } else {
+    const projects = await prisma.project.count();
+    if (projects > 1) {
+      console.log(
+        `Warning: ${projects} projects exist and no --project was given, so every one of them will be seeded into a single corpus.`,
+      );
+    }
+    console.log("Seeding RuleBase from all projects…");
+  }
 
   const requirements = await prisma.requirement.findMany({
+    where: projectId ? { projectId } : {},
     orderBy: { createdAt: "asc" },
   });
 
