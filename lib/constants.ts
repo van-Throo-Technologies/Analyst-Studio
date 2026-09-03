@@ -18,6 +18,11 @@ export const PRIORITIES = ["High", "Medium", "Low"] as const;
 // What kind of record a row is. Orthogonal to REQUIREMENT_TYPES above, which
 // classifies a *feature* as Functional / Business / and so on — a record can be
 // a feature that is Functional, or a business rule that is none of those.
+//
+// Includes "feature": the RuleBase model's comment lists only the child kinds,
+// but features are seeded into the corpus too and must be retrievable. The
+// extraction script, the rules API and the UI all read this list, so a kind
+// added here becomes queryable everywhere at once.
 export const RECORD_TYPES = [
   "feature",
   "business-rule",

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { verifySession } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
-import { INDUSTRIES } from "@/lib/constants";
+import { INDUSTRIES, RECORD_TYPES } from "@/lib/constants";
 
 /**
  * GET /api/features/rules
@@ -20,16 +20,6 @@ import { INDUSTRIES } from "@/lib/constants";
  *   grounded   "true" to return only rules whose quote was verified
  *   limit      1-500, default 100
  */
-
-// Includes "feature": the RuleBase model's comment lists only the child kinds,
-// but features are seeded into the corpus too and must be retrievable.
-const RECORD_TYPES = [
-  "feature",
-  "business-rule",
-  "regulatory-constraint",
-  "use-case",
-  "acceptance-criteria",
-] as const;
 
 const MAX_LIMIT = 500;
 const DEFAULT_LIMIT = 100;

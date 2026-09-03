@@ -64,7 +64,20 @@ script cannot stand in for the pipeline. Removing `lib/extract.ts` would leave
 the app a read-only browser over whatever was last imported, with the Extract
 button wired to nothing.
 
-What *is* worth fixing: the script carries its own `RequirementSchema` and
-`buildSystem()` prompt rather than sharing `lib/extract-core.ts`, so the two can
-drift. Consolidate the schema if you touch this — do not consolidate by
-deletion.
+The rules both paths must state identically live in
+`lib/extraction-contract.ts`: the precision rule, the quoting instruction, the
+literal-match promise, and the one-line definition of each record kind. Both
+prompts compose from it, so the grounding contract is written once. That module
+is deliberately free of `server-only` and of every import — `extract-core.ts`
+carries `server-only`, which throws under `tsx`, and that is precisely why the
+script grew its own copy in the first place. Keep it that way.
+
+What is *not* shared, on purpose: the two schemas. `extract-core.ts` produces
+features with pack fields plus separate child records for the `Requirement`
+table; the script produces flat rows carrying `recordType`, `quote` and `tags`
+for `RuleBase`. Different tables, different shapes. Merging them would break one
+of the two.
+
+`tests/extraction-contract.test.ts` fails if a copy comes back — it reads the
+source and rejects an inlined contract sentence or a restated enum. Run it with
+`npx tsx tests/extraction-contract.test.ts`; it needs no database and no server.

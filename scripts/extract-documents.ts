@@ -38,7 +38,13 @@ for (const file of [".env", ".env.local"]) {
 }
 
 import { isQuoteInSource } from "../lib/grounding";
-import { INDUSTRIES } from "../lib/constants";
+import { INDUSTRIES, RECORD_TYPES, PRIORITIES } from "../lib/constants";
+import {
+  precisionContract,
+  quotingRule,
+  literalMatchContract,
+  KIND_DEFINITIONS,
+} from "../lib/extraction-contract";
 import { tagsFor, frameworksFor } from "../lib/taxonomy";
 
 const prisma = new PrismaClient();
@@ -64,21 +70,15 @@ const CONCURRENCY = 3;
 const RequirementSchema = z.object({
   title: z.string(),
   description: z.string(),
-  recordType: z.enum([
-    "feature",
-    "business-rule",
-    "regulatory-constraint",
-    "use-case",
-    "acceptance-criteria",
-  ]),
+  recordType: z.enum(RECORD_TYPES),
   // Verbatim source text. Checked by literal match after the model returns it,
   // so this is a claim that gets tested rather than trusted.
   quote: z.string(),
   tags: z.array(z.string()),
   regulatoryFrameworks: z.array(z.string()),
-  // High / Medium / Low to match the rest of the system. The old script emitted
-  // must-have / should-have / nice-to-have, which nothing else understands.
-  priority: z.enum(["High", "Medium", "Low"]),
+  // The old script emitted must-have / should-have / nice-to-have, which nothing
+  // else understands. Reads the shared list now, so it cannot drift again.
+  priority: z.enum(PRIORITIES),
   actor: z.string().nullable(),
   trigger: z.string().nullable(),
   happyPath: z.string().nullable(),
@@ -98,18 +98,22 @@ function buildSystem(industry: string): string {
 
 Extract every distinct requirement in the section you are given, as one of five kinds:
 
-- feature: something the system must do, or a quality it must have.
-- business-rule: a policy, threshold or decision rule, stated so it can be tested. "Records are retained for six years." Every distinct threshold or band is its own rule — a table with three tiers is three rules.
-- regulatory-constraint: an obligation imposed from outside by law, regulation or a standards body. Name the framework in regulatoryFrameworks only where the source names it.
-- use-case: a named actor going through a journey end to end. Requires an actor.
+- feature: ${KIND_DEFINITIONS.feature}.
+- business-rule: ${KIND_DEFINITIONS["business-rule"]}.
+- regulatory-constraint: ${KIND_DEFINITIONS["regulatory-constraint"]}. Put the framework in regulatoryFrameworks.
+- use-case: ${KIND_DEFINITIONS["use-case"]}.
 - acceptance-criteria: a single checkable statement of what "done" means.
 
 Rules:
 - Extract only what the section supports. Do not invent requirements, and do not pad the list.
-- Where the source states a number, a threshold or a rule, capture it exactly. Where the source is vague, stay vague — never invent a specific nobody wrote down.
-- quote: one VERBATIM quote from this section that supports the requirement. Copy the exact characters as they appear. It must be a full clause, not two words.
+- ${precisionContract()}
+- ${quotingRule({ field: "quote", lead: "one VERBATIM quote from this section that supports the requirement" })}
 
-The quote is checked against the source by literal string match after you return it. A quote that does not appear exactly is discarded and the requirement is marked unverified — so copy, do not paraphrase.
+${literalMatchContract({
+  subject: "The quote",
+  consequence:
+    "A quote that does not appear exactly is discarded and the requirement is marked unverified — so copy, do not paraphrase.",
+})}
 
 Available tags: ${tagsFor(industry).join(", ")}.
 Available frameworks: ${frameworksFor(industry).join(", ")}.

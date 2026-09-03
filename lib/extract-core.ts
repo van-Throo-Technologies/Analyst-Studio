@@ -5,6 +5,11 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 
 import { REQUIREMENT_TYPES, PRIORITIES, SCOPES, PACK_VARIANTS } from "./constants";
+import {
+  precisionContract,
+  quotingRule,
+  literalMatchContract,
+} from "./extraction-contract";
 
 // The shared vocabulary of the extraction pipeline: the client, the shape of a
 // requirement, and the prompt that produces one. Split out from extract.ts so
@@ -197,7 +202,7 @@ General rules for all four:
 - The same underlying point can legitimately produce more than one record of different kinds — a feature and the rule that governs it. That is correct, not duplication. What is wrong is the same point twice as the same kind.
 - Link every business rule, constraint and use case to the feature it belongs to via parentFeatureTitle, using that feature's exact title. Use null only when it genuinely belongs to no single feature.
 
-Precision comes from the source, never from you. Where the material states a number, a threshold, an actor or a rule, capture it exactly. Where the material is vague, STAY VAGUE and record the missing decision in validationGates. Never invent a specific nobody said — a fabricated threshold reads exactly like a real one and someone will build against it.
+${precisionContract({ recordVaguenessIn: "validationGates" })}
 
 For each FEATURE:
 - title: a short imperative phrase, e.g. "Reset password by email link".
@@ -224,9 +229,13 @@ Packaging. The same requirements are published as two packs — a Business Analy
 
 Traceability and evidence:
 - sourceFilenames: the filenames of the documents this requirement was drawn from, exactly as given in the document tags. List every file that contributed. Never list a file you were not shown.
-- evidence: one to three VERBATIM quotes from the source that support this requirement. Copy the exact characters as they appear — do not paraphrase, do not tidy the grammar, do not merge two sentences into one. Each quote must be long enough to be unmistakable (a full clause, not two words).
+- ${quotingRule({ field: "evidence", lead: "one to three VERBATIM quotes from the source that support this requirement" })}
 
-The evidence is checked against the source by literal string match after you return it. A quote that does not appear exactly will be rejected and the requirement will be marked as unsupported. If you cannot quote the source for a requirement, that tells you something — the requirement may be your inference rather than something anyone said.
+${literalMatchContract({
+  subject: "The evidence",
+  consequence:
+    "A quote that does not appear exactly will be rejected and the requirement will be marked as unsupported. If you cannot quote the source for a requirement, that tells you something — the requirement may be your inference rather than something anyone said.",
+})}
 
 Return the features only. Business rules, regulatory constraints and use cases are collected separately — do not return them here, but do capture a rule inside a feature's businessRule field where it belongs to that feature.
 
@@ -250,6 +259,6 @@ USE CASES — a named actor going through a journey end to end, not a capability
 
 For all three:
 - parentFeatureTitle must be one of the feature titles given to you, copied exactly, or null if it genuinely belongs to no single feature.
-- evidence: one to three VERBATIM quotes from the source. Copy the exact characters. Quotes are checked by literal match afterwards and a quote that does not appear is discarded.
+- ${quotingRule({ field: "evidence", lead: "one to three VERBATIM quotes from the source" })} ${literalMatchContract({ subject: "The evidence", consequence: "A quote that does not appear is discarded." })}
 - sourceFilenames: the files this came from, exactly as given in the document tags.
 - Extract only what the material supports. Do not pad any list, and return an empty array for a kind the material genuinely does not contain.`;
